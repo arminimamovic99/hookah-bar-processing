@@ -28,6 +28,7 @@ export type Database = {
           email?: string | null;
           full_name?: string | null;
         };
+        Relationships: [];
       };
       tables: {
         Row: {
@@ -46,6 +47,7 @@ export type Database = {
           number?: string;
           is_active?: boolean;
         };
+        Relationships: [];
       };
       products: {
         Row: {
@@ -70,6 +72,7 @@ export type Database = {
           price?: number;
           is_available?: boolean;
         };
+        Relationships: [];
       };
       orders: {
         Row: {
@@ -90,6 +93,7 @@ export type Database = {
           table_id?: string;
           status?: OrderStatus;
         };
+        Relationships: [];
       };
       order_items: {
         Row: {
@@ -112,6 +116,7 @@ export type Database = {
           qty?: number;
           note?: string | null;
         };
+        Relationships: [];
       };
       order_station_status: {
         Row: {
@@ -131,6 +136,7 @@ export type Database = {
           shisha_status?: StationStatus;
           updated_at?: string;
         };
+        Relationships: [];
       };
     };
     Views: {

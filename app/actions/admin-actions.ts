@@ -40,7 +40,14 @@ export async function createProductAction(input: unknown) {
     nextName = 'Nargila';
   }
 
-  const { error } = await supabase.from('products').insert({
+  const { error } = await (supabase.from('products') as never as {
+    insert: (values: {
+      name: string;
+      category: 'drink' | 'shisha';
+      price: number;
+      is_available: boolean;
+    }) => Promise<{ error: { message: string } | null }>;
+  }).insert({
     name: nextName,
     category: parsed.data.category,
     price: parsed.data.price,
@@ -75,8 +82,14 @@ export async function updateProductAction(input: unknown) {
     nextName = 'Nargila';
   }
 
-  const { error } = await supabase
-    .from('products')
+  const { error } = await (supabase.from('products') as never as {
+    update: (values: {
+      name: string;
+      category: 'drink' | 'shisha';
+      price: number;
+      is_available: boolean;
+    }) => { eq: (column: 'id', value: string) => Promise<{ error: { message: string } | null }> };
+  })
     .update({
       name: nextName,
       category: parsed.data.category,
@@ -100,7 +113,11 @@ export async function deleteProductAction(productId: string) {
   if (!parsed.success) return { error: 'Neispravan ID proizvoda.' };
 
   const supabase = await createServerActionClient();
-  const { error } = await supabase.from('products').delete().eq('id', productId);
+  const { error } = await (supabase.from('products') as never as {
+    delete: () => { eq: (column: 'id', value: string) => Promise<{ error: { message: string } | null }> };
+  })
+    .delete()
+    .eq('id', productId);
   if (error) return { error: error.message };
 
   revalidatePath('/admin/products');

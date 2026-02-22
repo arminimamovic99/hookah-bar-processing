@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { Database } from '@/lib/types/database';
 
-export async function createServerComponentClient() {
+export async function createServerComponentClient(): Promise<any> {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -24,10 +25,10 @@ export async function createServerComponentClient() {
         },
       },
     }
-  );
+  ) as any;
 }
 
-export async function createServerActionClient() {
+export async function createServerActionClient(): Promise<any> {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -45,7 +46,7 @@ export async function createServerActionClient() {
         },
       },
     }
-  );
+  ) as any;
 }
 
 export const createClient = createServerComponentClient;

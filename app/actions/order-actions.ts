@@ -29,10 +29,19 @@ export async function createOrderAction(input: unknown) {
   const supabase = await createServerActionClient();
 
   const productIds = parsed.data.items.map((i) => i.productId);
-  const { data: products, error: productError } = await supabase
+  const { data: products, error: productError } = (await supabase
     .from('products')
     .select('id, category, is_available')
-    .in('id', productIds);
+    .in('id', productIds)) as {
+    data:
+      | {
+          id: string;
+          category: 'drink' | 'shisha';
+          is_available: boolean;
+        }[]
+      | null;
+    error: { message: string } | null;
+  };
 
   if (productError || !products) {
     return { error: 'Provjera proizvoda nije uspjela.' };
@@ -53,7 +62,7 @@ export async function createOrderAction(input: unknown) {
   const hasDrink = parsed.data.items.some((item) => productMap.get(item.productId)?.category === 'drink');
   const hasShisha = parsed.data.items.some((item) => productMap.get(item.productId)?.category === 'shisha');
 
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = (await supabase
     .from('orders')
     .insert({
       table_id: parsed.data.tableId,
@@ -61,7 +70,10 @@ export async function createOrderAction(input: unknown) {
       status: 'new',
     })
     .select('id')
-    .single();
+    .single()) as {
+    data: { id: string } | null;
+    error: { message: string } | null;
+  };
 
   if (orderError || !order) {
     return { error: orderError?.message ?? 'Kreiranje narudžbe nije uspjelo.' };

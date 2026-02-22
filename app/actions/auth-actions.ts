@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { roleDefaultRoute } from '@/lib/auth';
 import { createServerActionClient } from '@/lib/supabase/server';
+import { AppRole } from '@/lib/types/database';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -38,7 +39,11 @@ export async function loginAction(
     return { error: 'Neuspješno učitavanje korisnika.' };
   }
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const { data: profile } = (await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()) as { data: { role: AppRole } | null };
 
   if (!profile) {
     return { error: 'Profil nije pronađen. Zamolite admina da postavi vašu ulogu.' };
