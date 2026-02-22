@@ -9,3 +9,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 coverage
+  .next
+  .netlify
+  .env
+  .env.local
+  .env*.local
