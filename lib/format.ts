@@ -3,10 +3,18 @@ export function formatCurrency(value: number) {
 }
 
 export function formatDateTime(iso: string) {
-  return new Intl.DateTimeFormat('bs-BA', {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
     hour: '2-digit',
     minute: '2-digit',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(iso));
+    hour12: false,
+  }).formatToParts(new Date(iso));
+
+  const day = parts.find((part) => part.type === 'day')?.value ?? '';
+  const month = parts.find((part) => part.type === 'month')?.value ?? '';
+  const hour = parts.find((part) => part.type === 'hour')?.value ?? '';
+  const minute = parts.find((part) => part.type === 'minute')?.value ?? '';
+
+  return `${day} ${month} ${hour}:${minute}`;
 }

@@ -2,7 +2,7 @@ import { AdminProductsClient } from '@/components/shared/admin-products-client';
 import { LogoutButton } from '@/components/shared/logout-button';
 import { requireRoles } from '@/lib/auth';
 import { getAllProducts } from '@/lib/data';
-import { ProductCategory } from '@/lib/types/database';
+import { DrinkSubcategory, ProductCategory } from '@/lib/types/database';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +10,7 @@ type ProductRow = {
   id: string;
   name: string;
   category: ProductCategory;
+  drink_subcategory: DrinkSubcategory | null;
   price: number;
   is_available: boolean;
 };

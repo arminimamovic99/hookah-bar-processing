@@ -74,7 +74,10 @@ export function OrderCard({ order, station, onDone, loading }: OrderCardProps) {
                 {item.qty}x {item.products?.name ?? 'Nepoznata stavka'}
               </p>
               {item.products?.category === 'shisha' ? (
-                <p className="text-md text-muted-foreground font-bold">Mješavina okusa: {item.note?.trim() || 'Nije uneseno'}</p>
+                <>
+                  <p className="text-md text-muted-foreground font-bold">Mješavina okusa: {item.note?.trim() || 'Nije uneseno'}</p>
+                  <button className='bg-primary text-sm rounded-md p-2 text-white my-2 font-semibold'>Printaj</button>
+                </>
               ) : item.note ? (
                 <p className="text-xs text-muted-foreground">
                   Napomena: {item.note}
@@ -85,7 +88,7 @@ export function OrderCard({ order, station, onDone, loading }: OrderCardProps) {
         </ul>
 
         {onDone && station && currentStatus !== 'done' && relevantItems.length > 0 ? (
-          <Button disabled={loading} onClick={() => onDone(order.id)} className="w-full">
+          <Button disabled={loading} onClick={() => onDone(order.id)} className="w-full bg-success">
             {loading ? 'Spremanje...' : 'Označi kao gotovo'}
           </Button>
         ) : null}

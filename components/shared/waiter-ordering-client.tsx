@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { X } from 'lucide-react';
 import { createOrderAction } from '@/app/actions/order-actions';
 import { OrderCard, StationOrder } from '@/components/shared/order-card';
 import { ProductPicker, Product, DraftItem } from '@/components/shared/product-picker';
@@ -10,7 +9,7 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { TableOption, TableSelector } from '@/components/shared/table-selector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatDateTime } from '@/lib/format';
+import { formatCurrency, formatDateTime } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
 
 interface WaiterOrderingClientProps {
@@ -20,27 +19,27 @@ interface WaiterOrderingClientProps {
 }
 
 export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterOrderingClientProps) {
-  const dismissedStorageKey = 'waiter-dismissed-completed-orders';
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'new' | 'active'>('new');
   const [tableId, setTableId] = useState(tables[0]?.id ?? '');
   const [orders, setOrders] = useState<StationOrder[]>(activeOrders);
-  const [dismissedCompletedIds, setDismissedCompletedIds] = useState<string[]>([]);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
   const openOrders = useMemo(
     () => orders.filter((order) => order.status !== 'completed'),
     [orders]
   );
-  const completedOrders = useMemo(
-    () => orders.filter((order) => order.status === 'completed'),
+  const submittedOrders = useMemo(
+    () =>
+      [...orders].sort((a, b) => {
+        if (a.status === 'completed' && b.status !== 'completed') return -1;
+        if (a.status !== 'completed' && b.status === 'completed') return 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }),
     [orders]
-  );
-  const visibleCompletedOrders = useMemo(
-    () => completedOrders.filter((order) => !dismissedCompletedIds.includes(order.id)),
-    [completedOrders, dismissedCompletedIds]
   );
   const tableOrders = useMemo(
     () => openOrders.filter((order) => order.table_id === tableId),
@@ -60,39 +59,65 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
       ),
     [items, productCategoryMap]
   );
+  const productMap = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products]
+  );
+  const orderSummaryItems = useMemo(
+    () =>
+      items
+        .filter((item) => item.qty > 0)
+        .map((item, index) => {
+          const product = productMap.get(item.productId);
+          const name = product?.name ?? 'Nepoznat proizvod';
+          const unitPrice = product?.price ?? 0;
+          return {
+            id: `${item.productId}-${index}`,
+            name,
+            qty: item.qty,
+            note: item.note?.trim() || null,
+            lineTotal: unitPrice * item.qty,
+          };
+        }),
+    [items, productMap]
+  );
+  const orderTotal = useMemo(
+    () => orderSummaryItems.reduce((sum, item) => sum + item.lineTotal, 0),
+    [orderSummaryItems]
+  );
+  const orderSummaryBlock = (
+    <>
+      <div className="max-h-36 space-y-2 overflow-y-auto rounded-md border border-orange-200/70 bg-white/80 p-2">
+        {orderSummaryItems.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Narudžba je prazna.</p>
+        ) : (
+          orderSummaryItems.map((item) => (
+            <div key={item.id} className="text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium">
+                  {item.qty}x {item.name}
+                </p>
+                <p>{formatCurrency(item.lineTotal)}</p>
+              </div>
+              {item.note ? <p className="text-muted-foreground">Okus: {item.note}</p> : null}
+            </div>
+          ))
+        )}
+      </div>
+      <div className="flex items-center justify-between text-sm font-semibold">
+        <p>Ukupno</p>
+        <p>{formatCurrency(orderTotal)}</p>
+      </div>
+    </>
+  );
 
   useEffect(() => {
     setOrders(activeOrders);
   }, [activeOrders]);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem(dismissedStorageKey);
-    if (!raw) return;
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setDismissedCompletedIds(parsed.filter((v) => typeof v === 'string'));
-      }
-    } catch {
-      // Ignore malformed local storage payloads.
-    }
+    setIsProductsLoading(false);
   }, []);
-
-  useEffect(() => {
-    const completedIds = new Set(completedOrders.map((order) => order.id));
-    setDismissedCompletedIds((prev) => {
-      const next = prev.filter((id) => completedIds.has(id));
-      if (next.length !== prev.length) {
-        window.localStorage.setItem(dismissedStorageKey, JSON.stringify(next));
-      }
-      return next;
-    });
-  }, [completedOrders, dismissedStorageKey]);
-
-  useEffect(() => {
-    window.localStorage.setItem(dismissedStorageKey, JSON.stringify(dismissedCompletedIds));
-  }, [dismissedCompletedIds, dismissedStorageKey]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -162,12 +187,8 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
     });
   }
 
-  function clearCompletedOrder(orderId: string) {
-    setDismissedCompletedIds((prev) => (prev.includes(orderId) ? prev : [...prev, orderId]));
-  }
-
   return (
-    <div className="space-y-4 pb-28 md:pb-0">
+    <div className="space-y-4 pb-56 md:pb-0">
       <div className="grid grid-cols-2 gap-2 rounded-md border bg-white/70 p-1">
         <Button
           type="button"
@@ -183,9 +204,9 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
           className="relative"
         >
           Aktivne narudžbe
-          {visibleCompletedOrders.length > 0 ? (
+          {submittedOrders.length > 0 ? (
             <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-xs text-white">
-              {visibleCompletedOrders.length}
+              {submittedOrders.length}
             </span>
           ) : null}
         </Button>
@@ -199,8 +220,14 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
             </CardHeader>
             <CardContent className="space-y-5 p-5">
               <TableSelector tables={tables} value={tableId} onChange={setTableId} />
-              <ProductPicker products={products} items={items} onChange={setItems} />
+              <ProductPicker
+                products={products}
+                items={items}
+                onChange={setItems}
+                isLoading={isProductsLoading}
+              />
               {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
+              <div className="hidden space-y-2 md:block">{orderSummaryBlock}</div>
               <Button
                 onClick={submitOrder}
                 disabled={
@@ -214,7 +241,7 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
           </Card>
 
           <div className="space-y-3">
-            <h2 className="text-base font-semibold">Aktivne narudžbe za sto</h2>
+            <h2 className="text-base font-semibold">Aktivne narudžbe</h2>
             {tableOrders.length === 0 ? (
               <p className="text-sm text-muted-foreground">Još nema aktivnih narudžbi.</p>
             ) : (
@@ -223,6 +250,7 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
           </div>
 
           <div className="fixed inset-x-0 bottom-0 z-20 border-t border-orange-200/70 bg-background/95 p-3 backdrop-blur md:hidden">
+            <div className="mb-3 space-y-2">{orderSummaryBlock}</div>
             <Button
               onClick={submitOrder}
               disabled={
@@ -236,28 +264,21 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
         </>
       ) : (
         <div className="space-y-3">
-          <h2 className="text-base font-semibold">Završene narudžbe</h2>
-          {visibleCompletedOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Još nema završenih narudžbi.</p>
+          <h2 className="text-base font-semibold">Sve poslane narudžbe</h2>
+          {submittedOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Još nema poslanih narudžbi.</p>
           ) : (
-            visibleCompletedOrders.map((order) => (
-              <Card key={order.id} className="border-emerald-200 bg-white/90">
+            submittedOrders.map((order) => (
+              <Card
+                key={order.id}
+                className={
+                  order.status === 'completed' ? 'border-emerald-200 bg-white/90' : 'border-orange-200 bg-white/90'
+                }
+              >
                 <CardContent className="space-y-2 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold">Idi na sto {order.tables?.number ?? '-'}</p>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status="completed" />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => clearCompletedOrder(order.id)}
-                        aria-label={`Ukloni završenu narudžbu za sto ${order.tables?.number ?? '-'}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
                   </div>
                   <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
                 </CardContent>

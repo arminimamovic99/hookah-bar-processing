@@ -18,7 +18,7 @@ export async function getAvailableProducts() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('products')
-    .select('id, name, category, price, is_available')
+    .select('id, name, category, drink_subcategory, price, is_available')
     .eq('is_available', true)
     .order('category', { ascending: true })
     .order('name', { ascending: true });
@@ -31,7 +31,7 @@ export async function getAllProducts() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('products')
-    .select('id, name, category, price, is_available, created_at')
+    .select('id, name, category, drink_subcategory, price, is_available, created_at')
     .order('created_at', { ascending: false });
 
   if (error) throw error;

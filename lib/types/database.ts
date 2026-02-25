@@ -2,6 +2,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type AppRole = 'waiter' | 'bar' | 'shisha' | 'admin';
 export type ProductCategory = 'drink' | 'shisha';
+export type DrinkSubcategory = 'cold' | 'warm';
 export type OrderStatus = 'new' | 'in_progress' | 'completed';
 export type StationStatus = 'pending' | 'done';
 
@@ -54,6 +55,7 @@ export type Database = {
           id: string;
           name: string;
           category: ProductCategory;
+          drink_subcategory: DrinkSubcategory | null;
           price: number;
           is_available: boolean;
           created_at: string;
@@ -62,6 +64,7 @@ export type Database = {
           id?: string;
           name: string;
           category: ProductCategory;
+          drink_subcategory?: DrinkSubcategory | null;
           price: number;
           is_available?: boolean;
           created_at?: string;
@@ -69,6 +72,7 @@ export type Database = {
         Update: {
           name?: string;
           category?: ProductCategory;
+          drink_subcategory?: DrinkSubcategory | null;
           price?: number;
           is_available?: boolean;
         };
@@ -153,6 +157,7 @@ export type Database = {
     Enums: {
       app_role: AppRole;
       product_category: ProductCategory;
+      drink_subcategory: DrinkSubcategory;
       order_status: OrderStatus;
       station_status: StationStatus;
     };

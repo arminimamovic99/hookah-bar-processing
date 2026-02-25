@@ -27,6 +27,7 @@ export default {
         ring: 'hsl(var(--ring))',
         destructive: 'hsl(var(--destructive))',
         'destructive-foreground': 'hsl(var(--destructive-foreground))',
+        success: 'hsl(var(--success))'
       },
       borderRadius: {
         lg: 'var(--radius)',

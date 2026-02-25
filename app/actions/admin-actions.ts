@@ -8,14 +8,24 @@ import { createServerActionClient } from '@/lib/supabase/server';
 const createProductSchema = z.object({
   name: z.string().min(2).max(80),
   category: z.enum(['drink', 'shisha']),
+  drinkSubcategory: z.enum(['cold', 'warm']).nullable().optional(),
   price: z.coerce.number().min(0).max(9999),
   isAvailable: z.boolean().default(true),
+}).superRefine((data, ctx) => {
+  if (data.category === 'drink' && !data.drinkSubcategory) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['drinkSubcategory'],
+      message: 'Za novo piće je obavezna podkategorija.',
+    });
+  }
 });
 
 const updateProductSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(2).max(80),
   category: z.enum(['drink', 'shisha']),
+  drinkSubcategory: z.enum(['cold', 'warm']).nullable().optional(),
   price: z.coerce.number().min(0).max(9999),
   isAvailable: z.boolean(),
 });
@@ -44,12 +54,14 @@ export async function createProductAction(input: unknown) {
     insert: (values: {
       name: string;
       category: 'drink' | 'shisha';
+      drink_subcategory: 'cold' | 'warm' | null;
       price: number;
       is_available: boolean;
     }) => Promise<{ error: { message: string } | null }>;
   }).insert({
     name: nextName,
     category: parsed.data.category,
+    drink_subcategory: parsed.data.category === 'drink' ? (parsed.data.drinkSubcategory ?? null) : null,
     price: parsed.data.price,
     is_available: parsed.data.isAvailable,
   });
@@ -67,7 +79,30 @@ export async function updateProductAction(input: unknown) {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Neispravan unos.' };
 
   const supabase = await createServerActionClient();
+  const { data: existingProduct, error: existingProductError } = await supabase
+    .from('products')
+    .select('category, drink_subcategory')
+    .eq('id', parsed.data.id)
+    .single();
+
+  if (existingProductError || !existingProduct) {
+    return { error: existingProductError?.message ?? 'Proizvod nije pronađen.' };
+  }
+
   let nextName = parsed.data.name;
+  const nextDrinkSubcategory: 'cold' | 'warm' | null =
+    parsed.data.category === 'drink'
+      ? (parsed.data.drinkSubcategory ??
+        (existingProduct.category === 'drink' ? ((existingProduct.drink_subcategory as 'cold' | 'warm' | null) ?? null) : null))
+      : null;
+
+  if (
+    parsed.data.category === 'drink' &&
+    existingProduct.category !== 'drink' &&
+    !nextDrinkSubcategory
+  ) {
+    return { error: 'Za piće je obavezna podkategorija.' };
+  }
 
   if (parsed.data.category === 'shisha') {
     const { data: existingShisha, error: existingShishaError } = await supabase
@@ -86,6 +121,7 @@ export async function updateProductAction(input: unknown) {
     update: (values: {
       name: string;
       category: 'drink' | 'shisha';
+      drink_subcategory: 'cold' | 'warm' | null;
       price: number;
       is_available: boolean;
     }) => { eq: (column: 'id', value: string) => Promise<{ error: { message: string } | null }> };
@@ -93,6 +129,7 @@ export async function updateProductAction(input: unknown) {
     .update({
       name: nextName,
       category: parsed.data.category,
+      drink_subcategory: nextDrinkSubcategory,
       price: parsed.data.price,
       is_available: parsed.data.isAvailable,
     })
