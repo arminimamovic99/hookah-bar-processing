@@ -28,10 +28,10 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
     in_progress: 'U toku',
     completed: 'Završeno',
   };
-  const categoryLabelMap: Record<'drink' | 'shisha', string> = {
-    drink: 'piće',
-    shisha: 'nargila',
-  };
+  // const categoryLabelMap: Record<'drink' | 'shisha', string> = {
+  //   drink: 'piće',
+  //   shisha: 'nargila',
+  // };
 
   const orders = await getAdminOrders(view, status);
   const currentOrders = await getWaiterOrders();
