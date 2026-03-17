@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createOrderAction } from '@/app/actions/order-actions';
 import { OrderCard, StationOrder } from '@/components/shared/order-card';
-import { ProductPicker, Product, DraftItem } from '@/components/shared/product-picker';
+import { ProductPicker, Product, DraftItem, ShishaFlavor } from '@/components/shared/product-picker';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { TableOption, TableSelector } from '@/components/shared/table-selector';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatDateTime } from '@/lib/format';
@@ -15,10 +16,11 @@ import { createClient } from '@/lib/supabase/client';
 interface WaiterOrderingClientProps {
   tables: TableOption[];
   products: Product[];
+  shishaFlavors: ShishaFlavor[];
   activeOrders: StationOrder[];
 }
 
-export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterOrderingClientProps) {
+export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOrders }: WaiterOrderingClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'new' | 'active'>('new');
   const [tableId, setTableId] = useState(tables[0]?.id ?? '');
@@ -74,6 +76,7 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
           return {
             id: `${item.productId}-${index}`,
             name,
+            category: product?.category ?? null,
             qty: item.qty,
             note: item.note?.trim() || null,
             lineTotal: unitPrice * item.qty,
@@ -99,7 +102,11 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
                 </p>
                 <p>{formatCurrency(item.lineTotal)}</p>
               </div>
-              {item.note ? <p className="text-muted-foreground">Okus: {item.note}</p> : null}
+              {item.note ? (
+                <p className="text-muted-foreground">
+                  {item.category === 'shisha' ? 'Okus' : 'Napomena'}: {item.note}
+                </p>
+              ) : null}
             </div>
           ))
         )}
@@ -187,6 +194,31 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
     });
   }
 
+  function getStationBadges(order: StationOrder): { label: string; variant: 'success' | 'warning' }[] {
+    const stationStatus = Array.isArray(order.order_station_status)
+      ? order.order_station_status[0]
+      : order.order_station_status;
+    const hasDrink = (order.order_items ?? []).some((item) => item.products?.category === 'drink');
+    const hasShisha = (order.order_items ?? []).some((item) => item.products?.category === 'shisha');
+    const badges: { label: string; variant: 'success' | 'warning' }[] = [];
+
+    if (hasDrink) {
+      badges.push({
+        label: stationStatus?.bar_status === 'done' ? 'Piće gotovo' : 'Čeka se piće',
+        variant: stationStatus?.bar_status === 'done' ? 'success' : 'warning',
+      });
+    }
+
+    if (hasShisha) {
+      badges.push({
+        label: stationStatus?.shisha_status === 'done' ? 'Shisha gotova' : 'Čeka se shisha',
+        variant: stationStatus?.shisha_status === 'done' ? 'success' : 'warning',
+      });
+    }
+
+    return badges;
+  }
+
   return (
     <div className="space-y-4 pb-56 md:pb-0">
       <div className="grid grid-cols-2 gap-2 rounded-md border bg-white/70 p-1">
@@ -222,6 +254,7 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
               <TableSelector tables={tables} value={tableId} onChange={setTableId} />
               <ProductPicker
                 products={products}
+                shishaFlavors={shishaFlavors}
                 items={items}
                 onChange={setItems}
                 isLoading={isProductsLoading}
@@ -279,6 +312,13 @@ export function WaiterOrderingClient({ tables, products, activeOrders }: WaiterO
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold">Idi na sto {order.tables?.number ?? '-'}</p>
                     <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {getStationBadges(order).map((badge) => (
+                      <Badge key={badge.label} variant={badge.variant}>
+                        {badge.label}
+                      </Badge>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
                 </CardContent>

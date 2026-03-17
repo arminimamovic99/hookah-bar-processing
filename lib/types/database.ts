@@ -78,6 +78,25 @@ export type Database = {
         };
         Relationships: [];
       };
+      shisha_flavors: {
+        Row: {
+          id: string;
+          name: string;
+          is_available: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          is_available?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          is_available?: boolean;
+        };
+        Relationships: [];
+      };
       orders: {
         Row: {
           id: string;

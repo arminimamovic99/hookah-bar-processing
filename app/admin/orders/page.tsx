@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { LogoutButton } from '@/components/shared/logout-button';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRoles } from '@/lib/auth';
-import { getAdminOrders } from '@/lib/data';
+import { getAdminOrders, getWaiterOrders } from '@/lib/data';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,12 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
   };
 
   const orders = await getAdminOrders(view, status);
+  const currentOrders = await getWaiterOrders();
+  const submittedOrders = [...currentOrders].sort((a, b) => {
+    if (a.status === 'completed' && b.status !== 'completed') return -1;
+    if (a.status !== 'completed' && b.status === 'completed') return 1;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
   const orderCount = orders.length;
   const totalRevenue = orders.reduce((sum, order) => {
@@ -43,6 +50,31 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
 
     return sum + subtotal;
   }, 0);
+
+  function getStationBadges(order: (typeof submittedOrders)[number]) {
+    const stationStatus = Array.isArray(order.order_station_status)
+      ? order.order_station_status[0]
+      : order.order_station_status;
+    const hasDrink = (order.order_items ?? []).some((item) => item.products?.category === 'drink');
+    const hasShisha = (order.order_items ?? []).some((item) => item.products?.category === 'shisha');
+    const badges: { label: string; variant: 'success' | 'warning' }[] = [];
+
+    if (hasDrink) {
+      badges.push({
+        label: stationStatus?.bar_status === 'done' ? 'Piće gotovo' : 'Čeka se piće',
+        variant: stationStatus?.bar_status === 'done' ? 'success' : 'warning',
+      });
+    }
+
+    if (hasShisha) {
+      badges.push({
+        label: stationStatus?.shisha_status === 'done' ? 'Shisha gotova' : 'Čeka se shisha',
+        variant: stationStatus?.shisha_status === 'done' ? 'success' : 'warning',
+      });
+    }
+
+    return badges;
+  }
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-6">
@@ -84,7 +116,38 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
         </Card>
       </div>
 
-      <div className="grid gap-3">
+      <div className="mb-6 space-y-3">
+        <h2 className="text-base font-semibold">Pregled trenutnih narudžbi</h2>
+        {submittedOrders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Još nema poslanih narudžbi danas.</p>
+        ) : (
+          submittedOrders.map((order) => (
+            <Card
+              key={order.id}
+              className={
+                order.status === 'completed' ? 'border-emerald-200 bg-white/90' : 'border-orange-200 bg-white/90'
+              }
+            >
+              <CardContent className="space-y-2 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold">Sto {order.tables?.number ?? '-'}</p>
+                  <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {getStationBadges(order).map((badge) => (
+                    <Badge key={`${order.id}-${badge.label}`} variant={badge.variant}>
+                      {badge.label}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* <div className="grid gap-3">
         {orders.map((order) => {
           const station = Array.isArray(order.order_station_status)
             ? order.order_station_status[0]
@@ -113,7 +176,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
             </Card>
           );
         })}
-      </div>
+      </div> */}
     </main>
   );
 }

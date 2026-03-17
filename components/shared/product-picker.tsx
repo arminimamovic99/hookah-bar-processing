@@ -26,14 +26,22 @@ export type DraftItem = {
   note?: string;
 };
 
+export type ShishaFlavor = {
+  id: string;
+  name: string;
+  is_available?: boolean;
+};
+
 interface ProductPickerProps {
   products: Product[];
+  shishaFlavors: ShishaFlavor[];
   items: DraftItem[];
   onChange: (items: DraftItem[]) => void;
   isLoading?: boolean;
 }
 
-export function ProductPicker({ products, items, onChange, isLoading = false }: ProductPickerProps) {
+export function ProductPicker({ products, shishaFlavors, items, onChange, isLoading = false }: ProductPickerProps) {
+  const iceNoteText = 'Sa ledom';
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [activeCategory, setActiveCategory] = useState<ProductCategory>('drink');
   const [activeDrinkSubcategory, setActiveDrinkSubcategory] = useState<DrinkSubcategory>('cold');
@@ -41,7 +49,8 @@ export function ProductPicker({ products, items, onChange, isLoading = false }: 
   const [search, setSearch] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [selectedShishaProductId, setSelectedShishaProductId] = useState('');
-  const [shishaFlavor, setShishaFlavor] = useState('');
+  const [selectedShishaFlavorIds, setSelectedShishaFlavorIds] = useState<string[]>([]);
+  const [showShishaPickerCard, setShowShishaPickerCard] = useState(true);
 
   const selectableProducts = useMemo(
     () => products.filter((product) => product.is_available ?? true),
@@ -113,7 +122,8 @@ export function ProductPicker({ products, items, onChange, isLoading = false }: 
       setSelectedProductIds((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
     } else {
       setSelectedShishaProductId(productId);
-      setShishaFlavor('');
+      setSelectedShishaFlavorIds([]);
+      setShowShishaPickerCard(true);
     }
     setIsOpen(false);
     setSearch('');
@@ -124,17 +134,34 @@ export function ProductPicker({ products, items, onChange, isLoading = false }: 
   }
 
   function addShishaItem() {
-    if (!selectedShishaProductId || !shishaFlavor.trim()) return;
+    if (!selectedShishaProductId || selectedShishaFlavorIds.length === 0 || selectedShishaFlavorIds.length > 3) return;
+
+    const selectedFlavorNames = shishaFlavors
+      .filter((flavor) => selectedShishaFlavorIds.includes(flavor.id))
+      .map((flavor) => flavor.name);
 
     onChange([
       ...items,
       {
         productId: selectedShishaProductId,
         qty: 1,
-        note: shishaFlavor.trim(),
+        note: selectedFlavorNames.join(', '),
       },
     ]);
-    setShishaFlavor('');
+    setSelectedShishaFlavorIds([]);
+    setShowShishaPickerCard(false);
+  }
+
+  function toggleShishaFlavor(flavorId: string) {
+    setSelectedShishaFlavorIds((prev) => {
+      if (prev.includes(flavorId)) {
+        return prev.filter((id) => id !== flavorId);
+      }
+      if (prev.length >= 3) {
+        return prev;
+      }
+      return [...prev, flavorId];
+    });
   }
 
   function getDrinkQty(productId: string) {
@@ -144,7 +171,32 @@ export function ProductPicker({ products, items, onChange, isLoading = false }: 
   }
 
   function getDrinkNote(productId: string) {
-    return items.find((item) => item.productId === productId)?.note ?? '';
+    const note = items.find((item) => item.productId === productId)?.note ?? '';
+    return stripIceNote(note);
+  }
+
+  function hasIceInDrinkNote(productId: string) {
+    const note = items.find((item) => item.productId === productId)?.note ?? '';
+    return note.toLowerCase().includes(iceNoteText.toLowerCase());
+  }
+
+  function stripIceNote(note: string) {
+    return note
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part && part.toLowerCase() !== iceNoteText.toLowerCase())
+      .join(', ');
+  }
+
+  function mergeDrinkNote(customNote: string, includeIce: boolean) {
+    const parts = customNote
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (includeIce) {
+      parts.push(iceNoteText);
+    }
+    return parts.join(', ');
   }
 
   const shishaEntriesForSelected = selectedShishaProductId
@@ -283,69 +335,103 @@ export function ProductPicker({ products, items, onChange, isLoading = false }: 
       {!isLoading && activeCategory === 'drink'
         ? selectedProducts.map((selectedProduct) => (
             <Card key={selectedProduct.id} className="border-orange-200/60 bg-white/80">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{selectedProduct.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">{formatCurrency(selectedProduct.price)}</p>
-                <div className="flex items-center justify-between gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-11 min-w-20"
-                    onClick={() => updateDrink(selectedProduct.id, { qty: getDrinkQty(selectedProduct.id) + 1 })}
-                  >
-                    +1
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="h-11"
-                    onClick={() => removeSelectedDrink(selectedProduct.id)}
-                  >
-                    <X className="mr-1 h-4 w-4" />
-                    Ukloni
-                  </Button>
+              <CardContent className="space-y-2 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <CardTitle className="truncate text-sm">{selectedProduct.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{formatCurrency(selectedProduct.price)}</p>
+                  </div>
+                  <div className="flex shrink-0  gap-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-8 min-w-14 px-2 text-xs"
+                      onClick={() => updateDrink(selectedProduct.id, { qty: getDrinkQty(selectedProduct.id) + 1 })}
+                    >
+                      +1
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => removeSelectedDrink(selectedProduct.id)}
+                    >
+                      <X className="mr-1 h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Napomena (opcionalno)</Label>
+                  <Textarea
+                    placeholder="npr. kafa sa hladnim mlijekom"
+                    className="min-h-12 py-2 text-xs"
+                    value={getDrinkNote(selectedProduct.id)}
+                    onChange={(e) =>
+                      updateDrink(selectedProduct.id, {
+                        note: mergeDrinkNote(e.target.value, hasIceInDrinkNote(selectedProduct.id)),
+                      })
+                    }
+                  />
+                </div>
+                {selectedProduct.drink_subcategory === 'cold' ? (
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={hasIceInDrinkNote(selectedProduct.id)}
+                      onChange={(e) =>
+                        updateDrink(selectedProduct.id, {
+                          note: mergeDrinkNote(getDrinkNote(selectedProduct.id), e.target.checked),
+                        })
+                      }
+                    />
+                    Led
+                  </label>
+                ) : null}
                 {getDrinkQty(selectedProduct.id) > 0 ? (
                   <p className="text-xs text-muted-foreground">U narudžbi: {getDrinkQty(selectedProduct.id)}</p>
                 ) : null}
-                <div className="space-y-1">
-                  <Label className="text-xs">Napomena (opcionalno)</Label>
-                  <Textarea
-                    placeholder="npr. kafa sa hladnim mlijekom"
-                    value={getDrinkNote(selectedProduct.id)}
-                    onChange={(e) => updateDrink(selectedProduct.id, { note: e.target.value })}
-                  />
-                </div>
               </CardContent>
             </Card>
           ))
         : null}
 
-      {!isLoading && activeCategory === 'shisha' && selectedShishaProduct ? (
+      {!isLoading && activeCategory === 'shisha' && selectedShishaProduct && showShishaPickerCard ? (
         <Card className="border-orange-200/60 bg-white/80">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{selectedShishaProduct.name}</CardTitle>
+          <CardHeader className="pb-1 pt-3">
+            <CardTitle className="text-sm">{selectedShishaProduct.name}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">{formatCurrency(selectedShishaProduct.price)}</p>
+          <CardContent className="space-y-3 pb-4">
+            <p className="text-xs text-muted-foreground">{formatCurrency(selectedShishaProduct.price)}</p>
             <div className="space-y-1">
-              <Label className="text-xs">Mješavina okusa (obavezno)</Label>
-              <Textarea
-                placeholder="npr. swiss ice, limun borovnica"
-                value={shishaFlavor}
-                onChange={(e) => setShishaFlavor(e.target.value)}
-              />
-              {!shishaFlavor.trim() ? (
-                <p className="text-xs text-destructive">Mješavina okusa je obavezna.</p>
+              <Label className="text-xs">Odaberi do 3 okusa (obavezno)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {shishaFlavors.map((flavor) => {
+                  const isSelected = selectedShishaFlavorIds.includes(flavor.id);
+                  return (
+                    <Button
+                      key={flavor.id}
+                      type="button"
+                      variant={isSelected ? 'default' : 'outline'}
+                      className="h-10 justify-start px-3 text-xs"
+                      onClick={() => toggleShishaFlavor(flavor.id)}
+                    >
+                      {flavor.name}
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Odabrano: {selectedShishaFlavorIds.length}/3
+              </p>
+              {selectedShishaFlavorIds.length === 0 ? (
+                <p className="text-xs text-destructive">Odaberi bar jedan okus.</p>
               ) : null}
             </div>
             <Button
               type="button"
               variant="secondary"
-              className="h-11 min-w-20"
-              disabled={!shishaFlavor.trim()}
+              className="h-9 min-w-16 px-3 text-xs"
+              disabled={selectedShishaFlavorIds.length === 0}
               onClick={addShishaItem}
             >
               Dodaj
@@ -357,6 +443,20 @@ export function ProductPicker({ products, items, onChange, isLoading = false }: 
             ) : null}
           </CardContent>
         </Card>
+      ) : null}
+
+      {!isLoading && activeCategory === 'shisha' && selectedShishaProduct && !showShishaPickerCard ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full"
+          onClick={() => {
+            setSelectedShishaFlavorIds([]);
+            setShowShishaPickerCard(true);
+          }}
+        >
+          Dodaj još jednu nargilu
+        </Button>
       ) : null}
 
       {!isLoading && activeCategory === 'shisha' && !selectedShishaProduct ? (

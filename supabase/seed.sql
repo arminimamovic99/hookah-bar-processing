@@ -17,3 +17,16 @@ values
   ('Lemon Mint', 'drink', 4.50, true, 'warm'),
   ('Nargila', 'shisha', 12.00, true, null)
 on conflict do nothing;
+
+insert into public.shisha_flavors (name, is_available)
+values
+  ('Swiss Ice', true),
+  ('Lemon Mint', true),
+  ('Blueberry', true),
+  ('Grape Mint', true),
+  ('Peach', true),
+  ('Watermelon', true),
+  ('Mango', true),
+  ('Double Apple', true)
+on conflict (name) do update
+set is_available = excluded.is_available;

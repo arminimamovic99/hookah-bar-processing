@@ -27,6 +27,18 @@ export async function getAvailableProducts() {
   return data ?? [];
 }
 
+export async function getAvailableShishaFlavors() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('shisha_flavors')
+    .select('id, name, is_available')
+    .eq('is_available', true)
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getAllProducts() {
   const supabase = await createClient();
   const { data, error } = await supabase

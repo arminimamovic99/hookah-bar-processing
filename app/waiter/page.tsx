@@ -1,6 +1,6 @@
 import { requireRoles } from '@/lib/auth';
 import { StationOrder } from '@/components/shared/order-card';
-import { getActiveTables, getAvailableProducts, getWaiterOrders } from '@/lib/data';
+import { getActiveTables, getAvailableProducts, getAvailableShishaFlavors, getWaiterOrders } from '@/lib/data';
 import { LogoutButton } from '@/components/shared/logout-button';
 import { WaiterOrderingClient } from '@/components/shared/waiter-ordering-client';
 
@@ -11,6 +11,7 @@ export default async function WaiterPage() {
 
   const tables = await getActiveTables();
   const products = await getAvailableProducts();
+  const shishaFlavors = await getAvailableShishaFlavors();
   const orders = await getWaiterOrders();
 
   return (
@@ -19,7 +20,12 @@ export default async function WaiterPage() {
         <h1 className="text-xl font-bold">Konobar</h1>
         <LogoutButton />
       </div>
-      <WaiterOrderingClient tables={tables} products={products} activeOrders={orders as unknown as StationOrder[]} />
+      <WaiterOrderingClient
+        tables={tables}
+        products={products}
+        shishaFlavors={shishaFlavors}
+        activeOrders={orders as unknown as StationOrder[]}
+      />
     </main>
   );
 }
