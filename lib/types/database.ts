@@ -97,6 +97,37 @@ export type Database = {
         };
         Relationships: [];
       };
+      print_jobs: {
+        Row: {
+          id: string;
+          table_number: string;
+          content: string;
+          status: 'pending' | 'printing' | 'printed' | 'failed';
+          type: string;
+          error_message: string | null;
+          created_at: string;
+          printed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          table_number: string;
+          content: string;
+          status?: 'pending' | 'printing' | 'printed' | 'failed';
+          type?: string;
+          error_message?: string | null;
+          created_at?: string;
+          printed_at?: string | null;
+        };
+        Update: {
+          table_number?: string;
+          content?: string;
+          status?: 'pending' | 'printing' | 'printed' | 'failed';
+          type?: string;
+          error_message?: string | null;
+          printed_at?: string | null;
+        };
+        Relationships: [];
+      };
       orders: {
         Row: {
           id: string;

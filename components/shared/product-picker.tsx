@@ -35,12 +35,20 @@ export type ShishaFlavor = {
 interface ProductPickerProps {
   products: Product[];
   shishaFlavors: ShishaFlavor[];
+  hasActiveOrderForTable?: boolean;
   items: DraftItem[];
   onChange: (items: DraftItem[]) => void;
   isLoading?: boolean;
 }
 
-export function ProductPicker({ products, shishaFlavors, items, onChange, isLoading = false }: ProductPickerProps) {
+export function ProductPicker({
+  products,
+  shishaFlavors,
+  hasActiveOrderForTable = false,
+  items,
+  onChange,
+  isLoading = false,
+}: ProductPickerProps) {
   const iceNoteText = 'Sa ledom';
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [activeCategory, setActiveCategory] = useState<ProductCategory>('drink');
@@ -51,6 +59,7 @@ export function ProductPicker({ products, shishaFlavors, items, onChange, isLoad
   const [selectedShishaProductId, setSelectedShishaProductId] = useState('');
   const [selectedShishaFlavorIds, setSelectedShishaFlavorIds] = useState<string[]>([]);
   const [showShishaPickerCard, setShowShishaPickerCard] = useState(true);
+  const [isCup, setIsCup] = useState(false);
 
   const selectableProducts = useMemo(
     () => products.filter((product) => product.is_available ?? true),
@@ -124,6 +133,7 @@ export function ProductPicker({ products, shishaFlavors, items, onChange, isLoad
       setSelectedShishaProductId(productId);
       setSelectedShishaFlavorIds([]);
       setShowShishaPickerCard(true);
+      setIsCup(false);
     }
     setIsOpen(false);
     setSearch('');
@@ -139,17 +149,19 @@ export function ProductPicker({ products, shishaFlavors, items, onChange, isLoad
     const selectedFlavorNames = shishaFlavors
       .filter((flavor) => selectedShishaFlavorIds.includes(flavor.id))
       .map((flavor) => flavor.name);
+    const shishaNote = isCup ? `(Ćup) ${selectedFlavorNames.join(', ')}` : selectedFlavorNames.join(', ');
 
     onChange([
       ...items,
       {
         productId: selectedShishaProductId,
         qty: 1,
-        note: selectedFlavorNames.join(', '),
+        note: shishaNote,
       },
     ]);
     setSelectedShishaFlavorIds([]);
     setShowShishaPickerCard(false);
+    setIsCup(false);
   }
 
   function toggleShishaFlavor(flavorId: string) {
@@ -427,6 +439,16 @@ export function ProductPicker({ products, shishaFlavors, items, onChange, isLoad
                 <p className="text-xs text-destructive">Odaberi bar jedan okus.</p>
               ) : null}
             </div>
+            {hasActiveOrderForTable ? (
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={isCup}
+                  onChange={(e) => setIsCup(e.target.checked)}
+                />
+                Ćup
+              </label>
+            ) : null}
             <Button
               type="button"
               variant="secondary"
@@ -452,6 +474,7 @@ export function ProductPicker({ products, shishaFlavors, items, onChange, isLoad
           className="h-10 w-full"
           onClick={() => {
             setSelectedShishaFlavorIds([]);
+            setIsCup(false);
             setShowShishaPickerCard(true);
           }}
         >

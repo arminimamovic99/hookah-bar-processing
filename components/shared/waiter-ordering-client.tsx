@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createOrderAction } from '@/app/actions/order-actions';
+import { closeTableOrdersAction, createOrderAction } from '@/app/actions/order-actions';
 import { OrderCard, StationOrder } from '@/components/shared/order-card';
 import { ProductPicker, Product, DraftItem, ShishaFlavor } from '@/components/shared/product-picker';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
+import { CircleX } from 'lucide-react';
 
 interface WaiterOrderingClientProps {
   tables: TableOption[];
@@ -29,6 +30,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
+  const [isClosingTable, startCloseTransition] = useTransition();
 
   const openOrders = useMemo(
     () => orders.filter((order) => order.status !== 'completed'),
@@ -68,13 +70,15 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
   const orderSummaryItems = useMemo(
     () =>
       items
-        .filter((item) => item.qty > 0)
-        .map((item, index) => {
+        .map((item, index) => ({ item, sourceIndex: index }))
+        .filter(({ item }) => item.qty > 0)
+        .map(({ item, sourceIndex }, index) => {
           const product = productMap.get(item.productId);
           const name = product?.name ?? 'Nepoznat proizvod';
           const unitPrice = product?.price ?? 0;
           return {
             id: `${item.productId}-${index}`,
+            sourceIndex,
             name,
             category: product?.category ?? null,
             qty: item.qty,
@@ -88,6 +92,9 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     () => orderSummaryItems.reduce((sum, item) => sum + item.lineTotal, 0),
     [orderSummaryItems]
   );
+  function removeOrderSummaryItem(sourceIndex: number) {
+    setItems((prev) => prev.filter((_, index) => index !== sourceIndex));
+  }
   const orderSummaryBlock = (
     <>
       <div className="max-h-36 space-y-2 overflow-y-auto rounded-md border border-orange-200/70 bg-white/80 p-2">
@@ -97,10 +104,26 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
           orderSummaryItems.map((item) => (
             <div key={item.id} className="text-xs">
               <div className="flex items-start justify-between gap-2">
-                <p className="font-medium">
-                  {item.qty}x {item.name}
-                </p>
-                <p>{formatCurrency(item.lineTotal)}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">
+                    {item.qty}x {item.name}
+                  </p>
+
+                  <p>{formatCurrency(item.lineTotal)}</p>
+                </div>
+                <div className="flex gap-1 items-center h-full">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="p-2 text-xs text-muted-foreground"
+                    onClick={() => removeOrderSummaryItem(item.sourceIndex)}
+                    aria-label={`Ukloni ${item.name} iz narudžbe`}
+                  >
+                    Ukloni
+                    <CircleX/>
+                  </Button>
+                </div>
               </div>
               {item.note ? (
                 <p className="text-muted-foreground">
@@ -134,16 +157,34 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     const fetchLatestOrders = async () => {
       const from = new Date();
       from.setHours(0, 0, 0, 0);
-      const { data, error } = await supabase
+      const activeQuery = supabase
         .from('orders')
         .select(
           'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
         )
+        .in('status', ['new', 'in_progress'])
+        .order('created_at', { ascending: false });
+
+      const completedTodayQuery = supabase
+        .from('orders')
+        .select(
+          'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+        )
+        .eq('status', 'completed')
         .gte('created_at', from.toISOString())
         .order('created_at', { ascending: false });
 
-      if (!error && data && !isUnmounted) {
-        setOrders(data as unknown as StationOrder[]);
+      const [{ data: activeOrders, error: activeError }, { data: completedOrders, error: completedError }] =
+        await Promise.all([activeQuery, completedTodayQuery]);
+
+      if (!activeError && !completedError && !isUnmounted) {
+        const merged = [...(activeOrders ?? []), ...(completedOrders ?? [])] as StationOrder[];
+        const deduped = Array.from(
+          new Map<string, StationOrder>(merged.map((order) => [order.id, order])).values()
+        ).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setOrders(deduped);
       }
     };
 
@@ -184,11 +225,25 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
 
       const result = await createOrderAction(payload);
       if ('error' in result) {
-        setFeedback(result.error);
+        setFeedback(result.error ?? 'Došlo je do greške.');
         return;
       }
 
       setFeedback('Narudžba je poslana.');
+      setItems([]);
+      router.refresh();
+    });
+  }
+
+  function closeTableOrders() {
+    setFeedback(null);
+    startCloseTransition(async () => {
+      const result = await closeTableOrdersAction({ tableId });
+      if ('error' in result) {
+        setFeedback(result.error ?? 'Došlo je do greške.');
+        return;
+      }
+      setFeedback('Sto je zatvoren.');
       setItems([]);
       router.refresh();
     });
@@ -252,9 +307,19 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
             </CardHeader>
             <CardContent className="space-y-5 p-5">
               <TableSelector tables={tables} value={tableId} onChange={setTableId} />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={isClosingTable || !tableId || tableOrders.length === 0}
+                onClick={closeTableOrders}
+              >
+                {isClosingTable ? 'Zatvaranje...' : 'Zatvori sto'}
+              </Button>
               <ProductPicker
                 products={products}
                 shishaFlavors={shishaFlavors}
+                hasActiveOrderForTable={tableOrders.length > 0}
                 items={items}
                 onChange={setItems}
                 isLoading={isProductsLoading}
@@ -313,6 +378,14 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                     <p className="text-sm font-semibold">Idi na sto {order.tables?.number ?? '-'}</p>
                     <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
                   </div>
+                  {/* <PrintOrderButton
+                    tableNumber={order.tables?.number ?? '-'}
+                    items={(order.order_items ?? []).map((item) => ({
+                      qty: item.qty,
+                      name: item.products?.name ?? 'Nepoznata stavka',
+                      note: item.note,
+                    }))}
+                  /> */}
                   <div className="flex flex-wrap gap-2">
                     {getStationBadges(order).map((badge) => (
                       <Badge key={badge.label} variant={badge.variant}>

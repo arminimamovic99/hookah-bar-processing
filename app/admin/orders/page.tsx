@@ -34,8 +34,26 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
   // };
 
   const orders = await getAdminOrders(view, status);
-  const currentOrders = await getWaiterOrders();
-  const submittedOrders = [...currentOrders].sort((a, b) => {
+  const currentOrders = (await getWaiterOrders()) as {
+    id: string;
+    status: 'new' | 'in_progress' | 'completed';
+    created_at: string;
+    tables: { number: string } | null;
+    order_station_status:
+      | { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' }
+      | { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' }[]
+      | null;
+    order_items:
+      | {
+          qty: number;
+          note: string | null;
+          products: { name: string; category: 'drink' | 'shisha' } | null;
+        }[]
+      | null;
+  }[];
+  const submittedOrders = Array.from(
+    new Map<string, (typeof currentOrders)[number]>(currentOrders.map((order) => [order.id, order])).values()
+  ).sort((a, b) => {
     if (a.status === 'completed' && b.status !== 'completed') return -1;
     if (a.status !== 'completed' && b.status === 'completed') return 1;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();

@@ -53,16 +53,33 @@ export async function getAllProducts() {
 export async function getWaiterOrders() {
   const supabase = await createClient();
   const from = startOfDay(new Date());
-  const { data, error } = await supabase
+  const activeQuery = supabase
     .from('orders')
     .select(
       'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
     )
+    .in('status', ['new', 'in_progress'])
+    .order('created_at', { ascending: false });
+
+  const completedTodayQuery = supabase
+    .from('orders')
+    .select(
+      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+    )
+    .eq('status', 'completed')
     .gte('created_at', from.toISOString())
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data ?? [];
+  const [{ data: activeOrders, error: activeError }, { data: completedOrders, error: completedError }] =
+    await Promise.all([activeQuery, completedTodayQuery]);
+
+  if (activeError) throw activeError;
+  if (completedError) throw completedError;
+
+  const merged = [...(activeOrders ?? []), ...(completedOrders ?? [])];
+  return Array.from(new Map(merged.map((order) => [order.id, order])).values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }
 
 export async function getStationOrders(station: ProductCategory) {
@@ -89,7 +106,7 @@ export async function getAdminOrders(view: 'today' | 'week', status: 'all' | 'ne
   let query = supabase
     .from('orders')
     .select(
-      'id, status, created_at, table_id, tables(number), order_station_status(bar_status, shisha_status), order_items(qty, products(name, category, price))'
+      'id, status, created_at, table_id, tables(number), order_station_status(bar_status, shisha_status), order_items(qty, note, products(name, category, price))'
     )
     .gte('created_at', from.toISOString())
     .order('created_at', { ascending: false });

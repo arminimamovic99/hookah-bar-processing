@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireRoles } from '@/lib/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createServerActionClient } from '@/lib/supabase/server';
 
 const createOrderSchema = z.object({
@@ -62,37 +63,89 @@ export async function createOrderAction(input: unknown) {
   const hasDrink = parsed.data.items.some((item) => productMap.get(item.productId)?.category === 'drink');
   const hasShisha = parsed.data.items.some((item) => productMap.get(item.productId)?.category === 'shisha');
 
-  const { data: order, error: orderError } = (await supabase
+  const { data: activeOrder } = (await supabase
     .from('orders')
-    .insert({
-      table_id: parsed.data.tableId,
-      created_by_user: profile.id,
-      status: 'new',
-    })
     .select('id')
-    .single()) as {
+    .eq('table_id', parsed.data.tableId)
+    .in('status', ['new', 'in_progress'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()) as {
     data: { id: string } | null;
     error: { message: string } | null;
   };
 
-  if (orderError || !order) {
-    return { error: orderError?.message ?? 'Kreiranje narudžbe nije uspjelo.' };
-  }
+  let orderId = activeOrder?.id ?? null;
+  let createdNewOrder = false;
 
-  const { error: stationError } = await supabase.from('order_station_status').insert({
-    order_id: order.id,
-    bar_status: hasDrink ? 'pending' : 'done',
-    shisha_status: hasShisha ? 'pending' : 'done',
-  });
+  if (!orderId) {
+    const { data: order, error: orderError } = (await supabase
+      .from('orders')
+      .insert({
+        table_id: parsed.data.tableId,
+        created_by_user: profile.id,
+        status: 'new',
+      })
+      .select('id')
+      .single()) as {
+      data: { id: string } | null;
+      error: { message: string } | null;
+    };
 
-  if (stationError) {
-    await supabase.from('orders').delete().eq('id', order.id);
-    return { error: stationError.message };
+    if (orderError || !order) {
+      return { error: orderError?.message ?? 'Kreiranje narudžbe nije uspjelo.' };
+    }
+
+    orderId = order.id;
+    createdNewOrder = true;
+
+    const { error: stationError } = await supabase.from('order_station_status').insert({
+      order_id: orderId,
+      bar_status: hasDrink ? 'pending' : 'done',
+      shisha_status: hasShisha ? 'pending' : 'done',
+    });
+
+    if (stationError) {
+      await supabase.from('orders').delete().eq('id', orderId);
+      return { error: stationError.message };
+    }
+  } else {
+    const { data: existingStation } = (await supabase
+      .from('order_station_status')
+      .select('bar_status, shisha_status')
+      .eq('order_id', orderId)
+      .maybeSingle()) as {
+      data: { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' } | null;
+      error: { message: string } | null;
+    };
+
+    if (existingStation) {
+      const { error: stationUpdateError } = await supabase
+        .from('order_station_status')
+        .update({
+          bar_status: hasDrink ? 'pending' : existingStation.bar_status,
+          shisha_status: hasShisha ? 'pending' : existingStation.shisha_status,
+        })
+        .eq('order_id', orderId);
+
+      if (stationUpdateError) {
+        return { error: stationUpdateError.message };
+      }
+    } else {
+      const { error: stationInsertError } = await supabase.from('order_station_status').insert({
+        order_id: orderId,
+        bar_status: hasDrink ? 'pending' : 'done',
+        shisha_status: hasShisha ? 'pending' : 'done',
+      });
+      if (stationInsertError) {
+        return { error: stationInsertError.message };
+      }
+    }
   }
 
   const { error: itemsError } = await supabase.from('order_items').insert(
     parsed.data.items.map((item) => ({
-      order_id: order.id,
+      order_id: orderId,
       product_id: item.productId,
       qty: item.qty,
       note: item.note?.trim() || null,
@@ -100,7 +153,9 @@ export async function createOrderAction(input: unknown) {
   );
 
   if (itemsError) {
-    await supabase.from('orders').delete().eq('id', order.id);
+    if (createdNewOrder) {
+      await supabase.from('orders').delete().eq('id', orderId);
+    }
     return { error: itemsError.message };
   }
 
@@ -109,5 +164,54 @@ export async function createOrderAction(input: unknown) {
   revalidatePath('/station/shisha');
   revalidatePath('/admin/orders');
 
-  return { success: true, orderId: order.id };
+  return { success: true, orderId };
+}
+
+const closeTableSchema = z.object({
+  tableId: z.string().uuid(),
+});
+
+export async function closeTableOrdersAction(input: unknown) {
+  await requireRoles(['waiter', 'admin']);
+  const parsed = closeTableSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Neispravan sto.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: activeOrders, error: activeOrdersError } = (await admin
+    .from('orders')
+    .select('id')
+    .eq('table_id', parsed.data.tableId)
+    .in('status', ['new', 'in_progress'])) as {
+    data: { id: string }[] | null;
+    error: { message: string } | null;
+  };
+
+  if (activeOrdersError) {
+    return { error: activeOrdersError.message };
+  }
+
+  const orderIds = (activeOrders ?? []).map((order) => order.id);
+  if (orderIds.length === 0) {
+    return { success: true };
+  }
+
+  const { error: stationUpdateError } = await admin
+    .from('order_station_status')
+    .update({
+      bar_status: 'done',
+      shisha_status: 'done',
+    })
+    .in('order_id', orderIds);
+
+  if (stationUpdateError) {
+    return { error: stationUpdateError.message };
+  }
+
+  revalidatePath('/waiter');
+  revalidatePath('/station/bar');
+  revalidatePath('/station/shisha');
+  revalidatePath('/admin/orders');
+  return { success: true };
 }

@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PrintOrderButton } from '@/components/shared/print-order-button';
 import { formatDateTime } from '@/lib/format';
 import { ProductCategory, StationStatus } from '@/lib/types/database';
 import { StatusBadge } from './status-badge';
@@ -47,6 +48,7 @@ export function OrderCard({ order, station, onDone, loading }: OrderCardProps) {
   const relevantItems = (order.order_items ?? []).filter((item) =>
     station ? item.products?.category === station : true
   );
+  const canPrint = station === 'shisha';
 
   const stationStatus = Array.isArray(order.order_station_status)
     ? order.order_station_status[0]
@@ -76,7 +78,19 @@ export function OrderCard({ order, station, onDone, loading }: OrderCardProps) {
               {item.products?.category === 'shisha' ? (
                 <>
                   <p className="text-md text-muted-foreground font-bold">Mješavina okusa: {item.note?.trim() || 'Nije uneseno'}</p>
-                  <button className='bg-primary text-sm rounded-md p-2 text-white my-2 font-semibold'>Printaj</button>
+                  {canPrint ? (
+                    <PrintOrderButton
+                      tableNumber={order.tables?.number ?? '-'}
+                      items={[
+                        {
+                          qty: item.qty,
+                          name: item.products?.name ?? 'Nepoznata stavka',
+                          note: item.note,
+                        },
+                      ]}
+                      className="my-2"
+                    />
+                  ) : null}
                 </>
               ) : item.note ? (
                 <p className="text-xs text-muted-foreground">
