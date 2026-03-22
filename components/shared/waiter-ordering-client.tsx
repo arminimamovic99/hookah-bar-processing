@@ -37,15 +37,13 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     () => orders.filter((order) => order.status !== 'completed'),
     [orders]
   );
-  const submittedOrders = useMemo(
-    () =>
-      [...orders].sort((a, b) => {
-        if (a.status === 'completed' && b.status !== 'completed') return -1;
-        if (a.status !== 'completed' && b.status === 'completed') return 1;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }),
-    [orders]
-  );
+  const pendingOrders = useMemo(() => {
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    return orders
+      .filter((order) => order.status !== 'completed' && new Date(order.created_at) >= from)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [orders]);
   const tableOrders = useMemo(
     () => openOrders.filter((order) => order.table_id === tableId),
     [openOrders, tableId]
@@ -302,9 +300,9 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
           className="relative"
         >
           Aktivne narudžbe
-          {submittedOrders.length > 0 ? (
+          {pendingOrders.length > 0 ? (
             <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-xs text-white">
-              {submittedOrders.length}
+              {pendingOrders.length}
             </span>
           ) : null}
         </Button>
@@ -330,7 +328,6 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
               <ProductPicker
                 products={products}
                 shishaFlavors={shishaFlavors}
-                hasActiveOrderForTable={tableOrders.length > 0}
                 items={items}
                 onChange={setItems}
                 isLoading={isProductsLoading}
@@ -373,16 +370,14 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
         </>
       ) : (
         <div className="space-y-3">
-          <h2 className="text-base font-semibold">Sve poslane narudžbe</h2>
-          {submittedOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Još nema poslanih narudžbi.</p>
+          <h2 className="text-base font-semibold">Aktivne narudžbe</h2>
+          {pendingOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nema aktivnih narudžbi.</p>
           ) : (
-            submittedOrders.map((order) => (
+            pendingOrders.map((order) => (
               <Card
                 key={order.id}
-                className={
-                  order.status === 'completed' ? 'border-emerald-200 bg-white/90' : 'border-orange-200 bg-white/90'
-                }
+                className="border-orange-200 bg-white/90"
               >
                 <CardContent className="space-y-2 p-4">
                   <div className="flex items-center justify-between gap-3">

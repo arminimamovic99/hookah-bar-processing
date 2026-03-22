@@ -35,7 +35,6 @@ export type ShishaFlavor = {
 interface ProductPickerProps {
   products: Product[];
   shishaFlavors: ShishaFlavor[];
-  hasActiveOrderForTable?: boolean;
   items: DraftItem[];
   onChange: (items: DraftItem[]) => void;
   isLoading?: boolean;
@@ -44,12 +43,12 @@ interface ProductPickerProps {
 export function ProductPicker({
   products,
   shishaFlavors,
-  hasActiveOrderForTable = false,
   items,
   onChange,
   isLoading = false,
 }: ProductPickerProps) {
   const iceNoteText = 'Sa ledom';
+  const coffeeStyleOptions = ['Duza', 'Kratka', 'Obicna'] as const;
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [activeCategory, setActiveCategory] = useState<ProductCategory>('drink');
   const [activeDrinkSubcategory, setActiveDrinkSubcategory] = useState<DrinkSubcategory>('cold');
@@ -60,6 +59,7 @@ export function ProductPicker({
   const [selectedShishaFlavorIds, setSelectedShishaFlavorIds] = useState<string[]>([]);
   const [showShishaPickerCard, setShowShishaPickerCard] = useState(true);
   const [isCup, setIsCup] = useState(false);
+  const [shishaCustomNote, setShishaCustomNote] = useState('');
 
   const selectableProducts = useMemo(
     () => products.filter((product) => product.is_available ?? true),
@@ -134,6 +134,7 @@ export function ProductPicker({
       setSelectedShishaFlavorIds([]);
       setShowShishaPickerCard(true);
       setIsCup(false);
+      setShishaCustomNote('');
     }
     setIsOpen(false);
     setSearch('');
@@ -149,7 +150,9 @@ export function ProductPicker({
     const selectedFlavorNames = shishaFlavors
       .filter((flavor) => selectedShishaFlavorIds.includes(flavor.id))
       .map((flavor) => flavor.name);
-    const shishaNote = isCup ? `(Ćup) ${selectedFlavorNames.join(', ')}` : selectedFlavorNames.join(', ');
+    const flavorsText = isCup ? `(Ćup) ${selectedFlavorNames.join(', ')}` : selectedFlavorNames.join(', ');
+    const extraNote = shishaCustomNote.trim();
+    const shishaNote = extraNote ? `${flavorsText} | Napomena: ${extraNote}` : flavorsText;
 
     onChange([
       ...items,
@@ -162,6 +165,7 @@ export function ProductPicker({
     setSelectedShishaFlavorIds([]);
     setShowShishaPickerCard(false);
     setIsCup(false);
+    setShishaCustomNote('');
   }
 
   function toggleShishaFlavor(flavorId: string) {
@@ -184,7 +188,7 @@ export function ProductPicker({
 
   function getDrinkNote(productId: string) {
     const note = items.find((item) => item.productId === productId)?.note ?? '';
-    return stripIceNote(note);
+    return stripDrinkMetaNotes(note);
   }
 
   function hasIceInDrinkNote(productId: string) {
@@ -192,23 +196,53 @@ export function ProductPicker({
     return note.toLowerCase().includes(iceNoteText.toLowerCase());
   }
 
-  function stripIceNote(note: string) {
+  function getSelectedCoffeeStyle(productId: string) {
+    const note = items.find((item) => item.productId === productId)?.note ?? '';
+    const parts = note
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    return coffeeStyleOptions.find((option) =>
+      parts.some((part) => part.toLowerCase() === option.toLowerCase())
+    );
+  }
+
+  function stripDrinkMetaNotes(note: string) {
     return note
       .split(',')
       .map((part) => part.trim())
-      .filter((part) => part && part.toLowerCase() !== iceNoteText.toLowerCase())
+      .filter(
+        (part) =>
+          part &&
+          part.toLowerCase() !== iceNoteText.toLowerCase() &&
+          !coffeeStyleOptions.some((option) => option.toLowerCase() === part.toLowerCase())
+      )
       .join(', ');
   }
 
-  function mergeDrinkNote(customNote: string, includeIce: boolean) {
+  function mergeDrinkNote(
+    customNote: string,
+    includeIce: boolean,
+    coffeeStyle?: (typeof coffeeStyleOptions)[number]
+  ) {
     const parts = customNote
       .split(',')
       .map((part) => part.trim())
       .filter(Boolean);
+    if (coffeeStyle) {
+      parts.push(coffeeStyle);
+    }
     if (includeIce) {
       parts.push(iceNoteText);
     }
     return parts.join(', ');
+  }
+
+  function isCoffeeDrink(product: Product) {
+    const name = product.name.toLowerCase();
+    return (
+      name.includes('kafa') 
+    );
   }
 
   const shishaEntriesForSelected = selectedShishaProductId
@@ -380,11 +414,44 @@ export function ProductPicker({
                     value={getDrinkNote(selectedProduct.id)}
                     onChange={(e) =>
                       updateDrink(selectedProduct.id, {
-                        note: mergeDrinkNote(e.target.value, hasIceInDrinkNote(selectedProduct.id)),
+                        note: mergeDrinkNote(
+                          e.target.value,
+                          hasIceInDrinkNote(selectedProduct.id),
+                          getSelectedCoffeeStyle(selectedProduct.id)
+                        ),
                       })
                     }
                   />
                 </div>
+                {isCoffeeDrink(selectedProduct) ? (
+                  <div className="space-y-1">
+                    <Label className="text-[11px]">Kafa</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {coffeeStyleOptions.map((option) => {
+                        const isSelected = getSelectedCoffeeStyle(selectedProduct.id) === option;
+                        return (
+                          <Button
+                            key={option}
+                            type="button"
+                            variant={isSelected ? 'default' : 'outline'}
+                            className="h-7 rounded-full px-3 text-[11px]"
+                            onClick={() =>
+                              updateDrink(selectedProduct.id, {
+                                note: mergeDrinkNote(
+                                  getDrinkNote(selectedProduct.id),
+                                  hasIceInDrinkNote(selectedProduct.id),
+                                  isSelected ? undefined : option
+                                ),
+                              })
+                            }
+                          >
+                            {option}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 {selectedProduct.drink_subcategory === 'cold' ? (
                   <label className="flex items-center gap-2 text-xs">
                     <input
@@ -392,7 +459,11 @@ export function ProductPicker({
                       checked={hasIceInDrinkNote(selectedProduct.id)}
                       onChange={(e) =>
                         updateDrink(selectedProduct.id, {
-                          note: mergeDrinkNote(getDrinkNote(selectedProduct.id), e.target.checked),
+                          note: mergeDrinkNote(
+                            getDrinkNote(selectedProduct.id),
+                            e.target.checked,
+                            getSelectedCoffeeStyle(selectedProduct.id)
+                          ),
                         })
                       }
                     />
@@ -439,16 +510,24 @@ export function ProductPicker({
                 <p className="text-xs text-destructive">Odaberi bar jedan okus.</p>
               ) : null}
             </div>
-            {hasActiveOrderForTable ? (
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={isCup}
-                  onChange={(e) => setIsCup(e.target.checked)}
-                />
-                Ćup
-              </label>
-            ) : null}
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={isCup}
+                onChange={(e) => setIsCup(e.target.checked)}
+              />
+              Ćup
+            </label>
+            <div className="space-y-1">
+              <Label className="text-xs">Napomena (opcionalno)</Label>
+              <Textarea
+                placeholder="npr. manje swissa"
+                className="min-h-12 py-2 text-xs"
+                value={shishaCustomNote}
+                onChange={(e) => setShishaCustomNote(e.target.value)}
+                maxLength={120}
+              />
+            </div>
             <Button
               type="button"
               variant="secondary"
@@ -475,6 +554,7 @@ export function ProductPicker({
           onClick={() => {
             setSelectedShishaFlavorIds([]);
             setIsCup(false);
+            setShishaCustomNote('');
             setShowShishaPickerCard(true);
           }}
         >
