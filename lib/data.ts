@@ -11,7 +11,17 @@ export async function getActiveTables() {
     .order('number', { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).sort((a, b) => {
+    const aNum = Number(a.number);
+    const bNum = Number(b.number);
+    const aIsNumeric = Number.isFinite(aNum);
+    const bIsNumeric = Number.isFinite(bNum);
+
+    if (aIsNumeric && bIsNumeric) return aNum - bNum;
+    if (aIsNumeric) return -1;
+    if (bIsNumeric) return 1;
+    return a.number.localeCompare(b.number, 'bs');
+  });
 }
 
 export async function getAvailableProducts() {
