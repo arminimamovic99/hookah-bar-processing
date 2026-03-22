@@ -178,6 +178,10 @@ export async function closeTableOrdersAction(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? 'Neispravan sto.' };
   }
 
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.' };
+  }
+
   const admin = createAdminClient();
   const { data: activeOrders, error: activeOrdersError } = (await admin
     .from('orders')

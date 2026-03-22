@@ -31,6 +31,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [isClosingTable, startCloseTransition] = useTransition();
+  const [closingTableId, setClosingTableId] = useState<string | null>(null);
 
   const openOrders = useMemo(
     () => orders.filter((order) => order.status !== 'completed'),
@@ -134,7 +135,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
           ))
         )}
       </div>
-      <div className="flex items-center justify-between text-sm font-semibold">
+      <div className="flex items-center justify-between text-lg font-bold">
         <p>Ukupno</p>
         <p>{formatCurrency(orderTotal)}</p>
       </div>
@@ -235,16 +236,19 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     });
   }
 
-  function closeTableOrders() {
+  function closeTableOrders(targetTableId = tableId) {
     setFeedback(null);
     startCloseTransition(async () => {
-      const result = await closeTableOrdersAction({ tableId });
+      setClosingTableId(targetTableId);
+      const result = await closeTableOrdersAction({ tableId: targetTableId });
       if ('error' in result) {
         setFeedback(result.error ?? 'Došlo je do greške.');
+        setClosingTableId(null);
         return;
       }
       setFeedback('Sto je zatvoren.');
       setItems([]);
+      setClosingTableId(null);
       router.refresh();
     });
   }
@@ -272,6 +276,13 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     }
 
     return badges;
+  }
+
+  function getOrderTotal(order: StationOrder) {
+    return (order.order_items ?? []).reduce((sum, item) => {
+      const price = item.products?.price ?? 0;
+      return sum + item.qty * price;
+    }, 0);
   }
 
   return (
@@ -312,7 +323,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                 variant="outline"
                 className="w-full"
                 disabled={isClosingTable || !tableId || tableOrders.length === 0}
-                onClick={closeTableOrders}
+                onClick={() => closeTableOrders()}
               >
                 {isClosingTable ? 'Zatvaranje...' : 'Zatvori sto'}
               </Button>
@@ -378,6 +389,18 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                     <p className="text-sm font-semibold">Idi na sto {order.tables?.number ?? '-'}</p>
                     <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
                   </div>
+                  {order.status !== 'completed' ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isClosingTable}
+                      onClick={() => closeTableOrders(order.table_id)}
+                    >
+                      {isClosingTable && closingTableId === order.table_id ? 'Zatvaranje...' : 'Zatvori sto'}
+                    </Button>
+                  ) : null}
+                  <p className="text-xs font-semibold">Ukupno: {formatCurrency(getOrderTotal(order))}</p>
                   {/* <PrintOrderButton
                     tableNumber={order.tables?.number ?? '-'}
                     items={(order.order_items ?? []).map((item) => ({

@@ -47,7 +47,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
       | {
           qty: number;
           note: string | null;
-          products: { name: string; category: 'drink' | 'shisha' } | null;
+          products: { name: string; category: 'drink' | 'shisha'; price?: number } | null;
         }[]
       | null;
   }[];
@@ -92,6 +92,13 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
     }
 
     return badges;
+  }
+
+  function getOrderTotal(order: (typeof submittedOrders)[number]) {
+    return (order.order_items ?? []).reduce((sum, item) => {
+      const price = item.products?.price ?? 0;
+      return sum + item.qty * price;
+    }, 0);
   }
 
   return (
@@ -151,6 +158,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
                   <p className="text-sm font-semibold">Sto {order.tables?.number ?? '-'}</p>
                   <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
                 </div>
+                <p className="text-xs font-semibold">Ukupno: {formatCurrency(getOrderTotal(order))}</p>
                 <div className="flex flex-wrap gap-2">
                   {getStationBadges(order).map((badge) => (
                     <Badge key={`${order.id}-${badge.label}`} variant={badge.variant}>
