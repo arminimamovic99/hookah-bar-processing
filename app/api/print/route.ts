@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
       '',
       ...parsed.data.items,
       '',
-      now.toLocaleTimeString('bs-BA', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      // now.toLocaleTimeString('bs-BA', {
+      //   hour: '2-digit',
+      //   minute: '2-digit',
+      // }),
       '--------------------------',
     ].join('\n');
 

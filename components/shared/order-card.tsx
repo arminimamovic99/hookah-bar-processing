@@ -77,7 +77,7 @@ export function OrderCard({ order, station, onDone, loading }: OrderCardProps) {
               </p>
               {item.products?.category === 'shisha' ? (
                 <>
-                  <p className="text-md text-muted-foreground font-bold">Mješavina okusa: {item.note?.trim() || 'Nije uneseno'}</p>
+                  <p className="text-md text-muted-foreground font-bold">{item.note?.trim() || 'Nije uneseno'}</p>
                   {canPrint ? (
                     <PrintOrderButton
                       tableNumber={order.tables?.number ?? '-'}

@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://yrydrbaduuezsvluppdg.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyeWRyYmFkdXVlenN2bHVwcGRnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE4MTE3NywiZXhwIjoyMDg2NzU3MTc3fQ.2zXt9iCiRXR1VuLAsLQuy0flG3cxeUlt2Y3FRfrIYSg';
-const PRINTER_IP = '192.168.0.31';
+const PRINTER_IP = '192.168.0.2';
 const PRINTER_PORT = 9100;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !PRINTER_IP || !PRINTER_PORT) {
@@ -19,11 +19,40 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 let isPolling = false;
 
 function buildEscPosPayload(content) {
-  return Buffer.concat([
-    Buffer.from([0x1b, 0x40]), // ESC @ initialize
-    Buffer.from(`${content}\n\n`, 'utf8'),
-    Buffer.from([0x1d, 0x56, 0x00]), // GS V 0 full cut
-  ]);
+  const chunks = [Buffer.from([0x1b, 0x40])]; // ESC @ initialize
+  const lines = String(content).split('\n');
+  const titleLine = lines[0] ? String(lines[0]).trim() : '';
+
+  for (const line of lines) {
+    const trimmed = String(line).trim();
+    const isSeparator = trimmed.startsWith('---');
+    const isTime = /^\d{2}:\d{2}$/.test(trimmed);
+    const isTitle = trimmed === titleLine;
+    const isTableLine = trimmed.startsWith('Sto:');
+    const isContentLine = trimmed.length > 0 && !isSeparator && !isTime && !isTitle && !isTableLine;
+    const shouldBold = isTableLine || isContentLine || isTitle;
+    const align = isTitle ? 0x01 : 0x00; // ESC a n -> center title, left for other lines
+    const size = shouldBold ? 0x11 : 0x00; // GS ! n -> double width + double height when emphasized
+    chunks.push(Buffer.from([0x1b, 0x61, align]));
+    chunks.push(Buffer.from([0x1d, 0x21, size]));
+    chunks.push(Buffer.from([0x1b, 0x45, shouldBold ? 0x01 : 0x00])); // ESC E n (bold on/off)
+    chunks.push(Buffer.from(`${line}\n`, 'utf8'));
+    if (isContentLine) {
+      chunks.push(Buffer.from('\n', 'utf8')); // extra padding below shisha flavor mix
+    }
+    if (shouldBold) {
+      chunks.push(Buffer.from([0x1d, 0x21, 0x00])); // reset text size
+      chunks.push(Buffer.from([0x1b, 0x45, 0x00])); // ensure bold off for next line
+    }
+    if (isTitle) {
+      chunks.push(Buffer.from([0x1b, 0x61, 0x00])); // reset alignment to left
+    }
+  }
+
+  chunks.push(Buffer.from('\n', 'utf8'));
+  chunks.push(Buffer.from([0x1d, 0x56, 0x00])); // GS V 0 full cut
+
+  return Buffer.concat(chunks);
 }
 
 function sendToPrinter(content) {

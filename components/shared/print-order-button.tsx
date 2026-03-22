@@ -25,7 +25,9 @@ export function PrintOrderButton({ tableNumber, items, className }: PrintOrderBu
     try {
       const lines = items.map((item) =>
         item.note?.trim()
-          ? `${item.qty}x ${item.name} - ${item.note.trim()}`
+          ? item.name.trim().toLowerCase() === 'nargila'
+            ? item.note.trim()
+            : `${item.qty}x ${item.name} - ${item.note.trim()}`
           : `${item.qty}x ${item.name}`
       );
 
