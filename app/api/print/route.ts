@@ -35,7 +35,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const now = new Date();
     const content = [
       'UltraSpot',
       '--------------------------',
