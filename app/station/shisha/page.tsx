@@ -16,7 +16,12 @@ export default async function ShishaStationPage() {
         <h1 className="text-xl font-bold">Nargila stanica</h1>
         <LogoutButton />
       </div>
-      <StationBoardClient orders={orders as unknown as StationOrder[]} station="shisha" grid />
+      <StationBoardClient
+        orders={orders as unknown as StationOrder[]}
+        station="shisha"
+        grid
+        gridClassName="grid gap-3 sm:grid-cols-2 md:grid-cols-3"
+      />
     </main>
   );
 }
