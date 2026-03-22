@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 const printSchema = z.object({
@@ -51,8 +50,7 @@ export async function POST(req: NextRequest) {
       '--------------------------',
     ].join('\n');
 
-    const admin = createAdminClient();
-    const { error } = await admin.from('print_jobs').insert({
+    const { error } = await supabase.from('print_jobs').insert({
       table_number: parsed.data.tableNumber,
       content,
       status: 'pending',
