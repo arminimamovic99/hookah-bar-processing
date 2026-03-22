@@ -6,6 +6,7 @@ const SUPABASE_URL = 'https://yrydrbaduuezsvluppdg.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlyeWRyYmFkdXVlenN2bHVwcGRnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE4MTE3NywiZXhwIjoyMDg2NzU3MTc3fQ.2zXt9iCiRXR1VuLAsLQuy0flG3cxeUlt2Y3FRfrIYSg';
 const PRINTER_IP = '192.168.0.2';
 const PRINTER_PORT = 9100;
+const PAPER_CHARS = 24;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !PRINTER_IP || !PRINTER_PORT) {
   console.error('Missing required env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PRINTER_IP, PRINTER_PORT');
@@ -22,6 +23,29 @@ function buildEscPosPayload(content) {
   const chunks = [Buffer.from([0x1b, 0x40])]; // ESC @ initialize
   const lines = String(content).split('\n');
   const titleLine = lines[0] ? String(lines[0]).trim() : '';
+  const separator = '-'.repeat(Math.max(8, PAPER_CHARS));
+
+  function wrapLine(text, maxChars) {
+    const normalized = String(text || '').trim();
+    if (!normalized) return [''];
+    const words = normalized.split(/\s+/);
+    const out = [];
+    let current = '';
+    for (const word of words) {
+      if (!current) {
+        current = word;
+        continue;
+      }
+      if ((current + ' ' + word).length <= maxChars) {
+        current += ` ${word}`;
+      } else {
+        out.push(current);
+        current = word;
+      }
+    }
+    if (current) out.push(current);
+    return out.length > 0 ? out : [''];
+  }
 
   for (const line of lines) {
     const trimmed = String(line).trim();
@@ -31,21 +55,24 @@ function buildEscPosPayload(content) {
     const isTableLine = trimmed.startsWith('Sto:');
     const isContentLine = trimmed.length > 0 && !isSeparator && !isTime && !isTitle && !isTableLine;
     const shouldBold = isTableLine || isContentLine || isTitle;
-    const align = isTitle ? 0x01 : 0x00; // ESC a n -> center title, left for other lines
-    const size = shouldBold ? 0x11 : 0x00; // GS ! n -> double width + double height when emphasized
+    const align = 0x01; // ESC a n -> center all lines
+    const size = shouldBold ? 0x01 : 0x00; // GS ! n -> double height only (narrow paper friendly)
+    const printable = isSeparator ? separator : line;
+    const maxChars = shouldBold ? Math.max(10, Math.floor(PAPER_CHARS * 0.9)) : PAPER_CHARS;
+    const wrapped = wrapLine(printable, maxChars);
+
     chunks.push(Buffer.from([0x1b, 0x61, align]));
     chunks.push(Buffer.from([0x1d, 0x21, size]));
     chunks.push(Buffer.from([0x1b, 0x45, shouldBold ? 0x01 : 0x00])); // ESC E n (bold on/off)
-    chunks.push(Buffer.from(`${line}\n`, 'utf8'));
+    for (const part of wrapped) {
+      chunks.push(Buffer.from(`${part}\n`, 'utf8'));
+    }
     if (isContentLine) {
       chunks.push(Buffer.from('\n', 'utf8')); // extra padding below shisha flavor mix
     }
     if (shouldBold) {
       chunks.push(Buffer.from([0x1d, 0x21, 0x00])); // reset text size
       chunks.push(Buffer.from([0x1b, 0x45, 0x00])); // ensure bold off for next line
-    }
-    if (isTitle) {
-      chunks.push(Buffer.from([0x1b, 0x61, 0x00])); // reset alignment to left
     }
   }
 
