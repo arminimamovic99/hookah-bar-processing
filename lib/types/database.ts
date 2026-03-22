@@ -155,6 +155,7 @@ export type Database = {
           order_id: string;
           product_id: string;
           qty: number;
+          is_new: boolean;
           note: string | null;
           created_at: string;
         };
@@ -163,11 +164,13 @@ export type Database = {
           order_id: string;
           product_id: string;
           qty?: number;
+          is_new?: boolean;
           note?: string | null;
           created_at?: string;
         };
         Update: {
           qty?: number;
+          is_new?: boolean;
           note?: string | null;
         };
         Relationships: [];

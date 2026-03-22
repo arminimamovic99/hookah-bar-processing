@@ -66,7 +66,7 @@ export async function getWaiterOrders() {
   const activeQuery = supabase
     .from('orders')
     .select(
-      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
     )
     .in('status', ['new', 'in_progress'])
     .order('created_at', { ascending: false });
@@ -74,7 +74,7 @@ export async function getWaiterOrders() {
   const completedTodayQuery = supabase
     .from('orders')
     .select(
-      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
     )
     .eq('status', 'completed')
     .gte('created_at', from.toISOString())
@@ -97,7 +97,7 @@ export async function getStationOrders(station: ProductCategory) {
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
     )
     .in('status', ['new', 'in_progress'])
     .order('created_at', { ascending: false });
@@ -116,7 +116,7 @@ export async function getAdminOrders(view: 'today' | 'week', status: 'all' | 'ne
   let query = supabase
     .from('orders')
     .select(
-      'id, status, created_at, table_id, tables(number), order_station_status(bar_status, shisha_status), order_items(qty, note, products(name, category, price))'
+      'id, status, created_at, table_id, tables(number), order_station_status(bar_status, shisha_status), order_items(qty, is_new, note, products(name, category, price))'
     )
     .gte('created_at', from.toISOString())
     .order('created_at', { ascending: false });

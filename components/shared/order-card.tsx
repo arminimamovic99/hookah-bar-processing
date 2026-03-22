@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PrintOrderButton } from '@/components/shared/print-order-button';
+import { Badge } from '@/components/ui/badge';
 import { formatDateTime } from '@/lib/format';
 import { ProductCategory, StationStatus } from '@/lib/types/database';
 import { StatusBadge } from './status-badge';
@@ -8,6 +9,7 @@ import { StatusBadge } from './status-badge';
 export type StationOrderItem = {
   id: string;
   qty: number;
+  is_new?: boolean;
   note: string | null;
   products: {
     name: string;
@@ -72,9 +74,12 @@ export function OrderCard({ order, station, onDone, loading }: OrderCardProps) {
         <ul className="space-y-2">
           {relevantItems.map((item) => (
             <li key={item.id} className="rounded-md border border-orange-100 p-2 text-sm">
-              <p className="font-medium">
-                {item.qty}x {item.products?.name ?? 'Nepoznata stavka'}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium">
+                  {item.qty}x {item.products?.name ?? 'Nepoznata stavka'}
+                </p>
+                {station && item.is_new ? <Badge variant="warning">New</Badge> : null}
+              </div>
               {item.products?.category === 'shisha' ? (
                 <>
                   <p className="text-md text-muted-foreground font-bold">{item.note?.trim() || 'Nije uneseno'}</p>

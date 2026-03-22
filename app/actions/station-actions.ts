@@ -37,7 +37,7 @@ export async function markStationDoneAction(input: unknown) {
   if (!existingRow) {
     const { data: items, error: itemsError } = await supabase
       .from('order_items')
-      .select('products(category)')
+      .select('id, products(category)')
       .eq('order_id', orderId);
 
     if (itemsError) return { error: itemsError.message };
@@ -63,6 +63,27 @@ export async function markStationDoneAction(input: unknown) {
 
   if (error) return { error: error.message };
   if (!stationRow) return { error: 'Ažuriranje statusa stanice nije uspjelo.' };
+
+  const { data: stationItems, error: stationItemsError } = await supabase
+    .from('order_items')
+    .select('id, is_new, products(category)')
+    .eq('order_id', orderId);
+
+  if (stationItemsError) return { error: stationItemsError.message };
+
+  const stationCategory = station === 'bar' ? 'drink' : 'shisha';
+  const newItemIds = (stationItems ?? [])
+    .filter((item) => item.is_new && item.products?.category === stationCategory)
+    .map((item) => item.id);
+
+  if (newItemIds.length > 0) {
+    const { error: clearNewError } = await supabase
+      .from('order_items')
+      .update({ is_new: false })
+      .in('id', newItemIds);
+
+    if (clearNewError) return { error: clearNewError.message };
+  }
 
   const nextOrderStatus =
     stationRow.bar_status === 'done' && stationRow.shisha_status === 'done'

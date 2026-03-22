@@ -161,7 +161,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
       const activeQuery = supabase
         .from('orders')
         .select(
-          'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+          'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
         )
         .in('status', ['new', 'in_progress'])
         .order('created_at', { ascending: false });
@@ -169,7 +169,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
       const completedTodayQuery = supabase
         .from('orders')
         .select(
-          'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(name, category, price))'
+          'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
         )
         .eq('status', 'completed')
         .gte('created_at', from.toISOString())

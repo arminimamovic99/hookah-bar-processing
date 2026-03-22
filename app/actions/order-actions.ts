@@ -27,7 +27,12 @@ export async function createOrderAction(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? 'Neispravan format narudžbe.' };
   }
 
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.' };
+  }
+
   const supabase = await createServerActionClient();
+  const admin = createAdminClient();
 
   const productIds = parsed.data.items.map((i) => i.productId);
   const { data: products, error: productError } = (await supabase
@@ -99,7 +104,7 @@ export async function createOrderAction(input: unknown) {
     orderId = order.id;
     createdNewOrder = true;
 
-    const { error: stationError } = await supabase.from('order_station_status').insert({
+    const { error: stationError } = await admin.from('order_station_status').insert({
       order_id: orderId,
       bar_status: hasDrink ? 'pending' : 'done',
       shisha_status: hasShisha ? 'pending' : 'done',
@@ -110,7 +115,7 @@ export async function createOrderAction(input: unknown) {
       return { error: stationError.message };
     }
   } else {
-    const { data: existingStation } = (await supabase
+    const { data: existingStation } = (await admin
       .from('order_station_status')
       .select('bar_status, shisha_status')
       .eq('order_id', orderId)
@@ -120,7 +125,7 @@ export async function createOrderAction(input: unknown) {
     };
 
     if (existingStation) {
-      const { error: stationUpdateError } = await supabase
+      const { error: stationUpdateError } = await admin
         .from('order_station_status')
         .update({
           bar_status: hasDrink ? 'pending' : existingStation.bar_status,
@@ -132,7 +137,7 @@ export async function createOrderAction(input: unknown) {
         return { error: stationUpdateError.message };
       }
     } else {
-      const { error: stationInsertError } = await supabase.from('order_station_status').insert({
+      const { error: stationInsertError } = await admin.from('order_station_status').insert({
         order_id: orderId,
         bar_status: hasDrink ? 'pending' : 'done',
         shisha_status: hasShisha ? 'pending' : 'done',
@@ -148,6 +153,7 @@ export async function createOrderAction(input: unknown) {
       order_id: orderId,
       product_id: item.productId,
       qty: item.qty,
+      is_new: !createdNewOrder,
       note: item.note?.trim() || null,
     }))
   );
