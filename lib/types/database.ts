@@ -135,6 +135,7 @@ export type Database = {
           status: OrderStatus;
           created_by_user: string;
           created_at: string;
+          closed_at: string | null;
         };
         Insert: {
           id?: string;
@@ -142,10 +143,12 @@ export type Database = {
           status?: OrderStatus;
           created_by_user: string;
           created_at?: string;
+          closed_at?: string | null;
         };
         Update: {
           table_id?: string;
           status?: OrderStatus;
+          closed_at?: string | null;
         };
         Relationships: [];
       };

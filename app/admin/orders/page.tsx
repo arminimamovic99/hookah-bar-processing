@@ -34,6 +34,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
   // };
 
   const orders = await getAdminOrders(view, status);
+  const ordersToday = await getAdminOrders('today', 'all');
   const currentOrders = (await getWaiterOrders()) as {
     id: string;
     status: 'new' | 'in_progress' | 'completed';
@@ -67,6 +68,15 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
     }, 0);
 
     return sum + subtotal;
+  }, 0);
+  const todayShishaCount = ordersToday.reduce((sum, order) => {
+    const shishaQty = (order.order_items ?? []).reduce((acc, item) => {
+      if (item.products?.category !== 'shisha') {
+        return acc;
+      }
+      return acc + item.qty;
+    }, 0);
+    return sum + shishaQty;
   }, 0);
 
   function getStationBadges(order: (typeof submittedOrders)[number]) {
@@ -122,7 +132,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
         ))}
       </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-2">
+      <div className="mb-4 grid gap-3 md:grid-cols-3">
         <Card className="bg-white/90">
           <CardHeader>
             <CardTitle>Broj narudžbi</CardTitle>
@@ -137,6 +147,14 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/90">
+          <CardHeader>
+            <CardTitle>Broj nargila danas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{todayShishaCount}</p>
           </CardContent>
         </Card>
       </div>

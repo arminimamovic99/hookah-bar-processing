@@ -63,33 +63,22 @@ export async function getAllProducts() {
 export async function getWaiterOrders() {
   const supabase = await createClient();
   const from = startOfDay(new Date());
-  const activeQuery = supabase
+  const { data, error } = await supabase
     .from('orders')
     .select(
       'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
     )
-    .in('status', ['new', 'in_progress'])
-    .order('created_at', { ascending: false });
-
-  const completedTodayQuery = supabase
-    .from('orders')
-    .select(
-      'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
-    )
-    .eq('status', 'completed')
+    .in('status', ['new', 'in_progress', 'completed'])
+    .is('closed_at', null)
     .gte('created_at', from.toISOString())
     .order('created_at', { ascending: false });
 
-  const [{ data: activeOrders, error: activeError }, { data: completedOrders, error: completedError }] =
-    await Promise.all([activeQuery, completedTodayQuery]);
-
-  if (activeError) throw activeError;
-  if (completedError) throw completedError;
-
-  const merged = [...(activeOrders ?? []), ...(completedOrders ?? [])];
-  return Array.from(new Map(merged.map((order) => [order.id, order])).values()).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  if (error) throw error;
+  const merged = data ?? [];
+  const deduped = Array.from(new Map(merged.map((order) => [order.id, order])).values()) as Array<{
+    created_at: string;
+  }>;
+  return deduped.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 export async function getStationOrders(station: ProductCategory) {

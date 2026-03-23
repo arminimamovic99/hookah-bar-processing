@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireRoles } from '@/lib/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createServerActionClient } from '@/lib/supabase/server';
 
 const createOrderSchema = z.object({
@@ -66,7 +67,8 @@ export async function createOrderAction(input: unknown) {
     .from('orders')
     .select('id')
     .eq('table_id', parsed.data.tableId)
-    .in('status', ['new', 'in_progress'])
+    .is('closed_at', null)
+    .in('status', ['new', 'in_progress', 'completed'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()) as {
@@ -182,7 +184,8 @@ export async function closeTableOrdersAction(input: unknown) {
     .from('orders')
     .select('id')
     .eq('table_id', parsed.data.tableId)
-    .in('status', ['new', 'in_progress'])) as {
+    .is('closed_at', null)
+    .in('status', ['new', 'in_progress', 'completed'])) as {
     data: { id: string }[] | null;
     error: { message: string } | null;
   };
@@ -206,6 +209,22 @@ export async function closeTableOrdersAction(input: unknown) {
 
   if (stationUpdateError) {
     return { error: stationUpdateError.message };
+  }
+
+  const { error: closeOrdersError } = await supabase
+    .from('orders')
+    .update({ closed_at: new Date().toISOString() })
+    .in('id', orderIds);
+
+  if (closeOrdersError) {
+    const adminSupabase = createAdminClient();
+    const { error: adminCloseOrdersError } = await adminSupabase
+      .from('orders')
+      .update({ closed_at: new Date().toISOString() })
+      .in('id', orderIds);
+    if (adminCloseOrdersError) {
+      return { error: adminCloseOrdersError.message };
+    }
   }
 
   revalidatePath('/waiter');
