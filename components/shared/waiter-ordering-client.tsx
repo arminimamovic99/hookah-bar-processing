@@ -23,7 +23,7 @@ interface WaiterOrderingClientProps {
 
 export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOrders }: WaiterOrderingClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'new' | 'active' | 'ready'>('new');
+  const [activeTab, setActiveTab] = useState<'new' | 'active'>('new');
   const [tableId, setTableId] = useState(tables[0]?.id ?? '');
   const [orders, setOrders] = useState<StationOrder[]>(activeOrders);
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -40,14 +40,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
       .filter((order) => new Date(order.created_at) >= from)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [orders]);
-  const readyOrders = useMemo(
-    () => visibleOrders.filter((order) => isOrderReady(order)),
-    [visibleOrders]
-  );
-  const pendingOrders = useMemo(
-    () => visibleOrders.filter((order) => !isOrderReady(order)),
-    [visibleOrders]
-  );
+  const pendingOrders = useMemo(() => visibleOrders, [visibleOrders]);
   const tableOrders = useMemo(
     () => visibleOrders.filter((order) => order.table_id === tableId),
     [visibleOrders, tableId]
@@ -277,19 +270,9 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     }, 0);
   }
 
-  function isOrderReady(order: StationOrder) {
-    const stationStatus = Array.isArray(order.order_station_status)
-      ? order.order_station_status[0]
-      : order.order_station_status;
-    if (order.status === 'completed') {
-      return true;
-    }
-    return stationStatus?.bar_status === 'done' && stationStatus?.shisha_status === 'done';
-  }
-
   return (
     <div className="space-y-4 pb-56 md:pb-0">
-      <div className="grid grid-cols-3 gap-2 rounded-md border bg-white/70 p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-md border bg-white/70 p-1">
         <Button
           type="button"
           variant={activeTab === 'new' ? 'default' : 'ghost'}
@@ -307,19 +290,6 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
           {pendingOrders.length > 0 ? (
             <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-xs text-white">
               {pendingOrders.length}
-            </span>
-          ) : null}
-        </Button>
-        <Button
-          type="button"
-          variant={activeTab === 'ready' ? 'default' : 'ghost'}
-          onClick={() => setActiveTab('ready')}
-          className="relative"
-        >
-          Za naplatu
-          {readyOrders.length > 0 ? (
-            <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-xs text-white">
-              {readyOrders.length}
             </span>
           ) : null}
         </Button>
@@ -385,7 +355,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
             </Button>
           </div>
         </>
-      ) : activeTab === 'active' ? (
+      ) : (
         <div className="space-y-3">
           <h2 className="text-base font-semibold">Aktivne narudžbe</h2>
           {pendingOrders.length === 0 ? (
@@ -426,57 +396,6 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                       </Badge>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold">Za naplatu</h2>
-          {readyOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nema gotovih narudžbi.</p>
-          ) : (
-            readyOrders.map((order) => (
-              <Card
-                key={order.id}
-                className="border-orange-200 bg-white/90"
-              >
-                <CardContent className="space-y-3 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold">Sto {order.tables?.number ?? '-'}</p>
-                    <StatusBadge status="completed" />
-                  </div>
-                  <div className="space-y-1 text-xs">
-                    {(order.order_items ?? []).length === 0 ? (
-                      <p className="text-muted-foreground">Nema stavki.</p>
-                    ) : (
-                      (order.order_items ?? []).map((item) => (
-                        <div key={item.id} className="flex items-start justify-between gap-2">
-                          <p className="min-w-0 flex-1">
-                            {item.qty}x {item.products?.name ?? 'Nepoznata stavka'}
-                            {item.note?.trim() ? (
-                              <span className="text-muted-foreground"> ({item.note.trim()})</span>
-                            ) : null}
-                          </p>
-                          <p className="shrink-0">
-                            {formatCurrency((item.products?.price ?? 0) * item.qty)}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <p className="text-sm font-semibold">Ukupno: {formatCurrency(getOrderTotal(order))}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isClosingTable}
-                    onClick={() => closeTableOrders(order.table_id)}
-                  >
-                    {isClosingTable && closingTableId === order.table_id ? 'Zatvaranje...' : 'Zatvori sto'}
-                  </Button>
                   <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
                 </CardContent>
               </Card>
