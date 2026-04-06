@@ -1,115 +1,46 @@
-import Link from 'next/link';
+import { AdminOrdersDashboard } from '@/components/shared/admin-orders-dashboard';
 import { LogoutButton } from '@/components/shared/logout-button';
-import { StatusBadge } from '@/components/shared/status-badge';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRoles } from '@/lib/auth';
-import { getAdminOrders, getWaiterOrders } from '@/lib/data';
-import { formatCurrency, formatDateTime } from '@/lib/format';
+import { getAdminOrdersDataset, getAllProducts } from '@/lib/data';
+import { ProductCategory } from '@/lib/types/database';
 
 export const dynamic = 'force-dynamic';
 
-interface AdminOrdersPageProps {
-  searchParams: Promise<{
-    view?: 'today' | 'week';
-    status?: 'all' | 'new' | 'in_progress' | 'completed';
-  }>;
-}
+type DashboardOrder = {
+  id: string;
+  status: 'new' | 'in_progress' | 'completed' | 'archived';
+  created_at: string;
+  closed_at: string | null;
+  tables: { number: string } | null;
+  order_station_status:
+    | { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' }
+    | { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' }[]
+    | null;
+  order_items:
+    | {
+        id: string;
+        qty: number;
+        note: string | null;
+        products: {
+          id: string;
+          name: string;
+          category: ProductCategory;
+          price: number;
+        } | null;
+      }[]
+    | null;
+};
 
-export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageProps) {
+export default async function AdminOrdersPage() {
   await requireRoles(['admin']);
-  const params = await searchParams;
 
-  const view = params.view === 'week' ? 'week' : 'today';
-  const status = params.status ?? 'all';
-  const statusLabelMap: Record<'all' | 'new' | 'in_progress' | 'completed', string> = {
-    all: 'Sve',
-    new: 'Novo',
-    in_progress: 'U toku',
-    completed: 'Završeno',
-  };
-  // const categoryLabelMap: Record<'drink' | 'shisha', string> = {
-  //   drink: 'piće',
-  //   shisha: 'nargila',
-  // };
-
-  const orders = await getAdminOrders(view, status);
-  const ordersToday = await getAdminOrders('today', 'all');
-  const currentOrders = (await getWaiterOrders()) as {
-    id: string;
-    status: 'new' | 'in_progress' | 'completed';
-    created_at: string;
-    tables: { number: string } | null;
-    order_station_status:
-      | { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' }
-      | { bar_status: 'pending' | 'done'; shisha_status: 'pending' | 'done' }[]
-      | null;
-    order_items:
-      | {
-          qty: number;
-          note: string | null;
-          products: { name: string; category: 'drink' | 'shisha'; price?: number } | null;
-        }[]
-      | null;
-  }[];
-  const submittedOrders = Array.from(
-    new Map<string, (typeof currentOrders)[number]>(currentOrders.map((order) => [order.id, order])).values()
-  ).sort((a, b) => {
-    if (a.status === 'completed' && b.status !== 'completed') return -1;
-    if (a.status !== 'completed' && b.status === 'completed') return 1;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-
-  const orderCount = orders.length;
-  const totalRevenue = orders.reduce((sum, order) => {
-    const subtotal = (order.order_items ?? []).reduce((acc, item) => {
-      const price = item.products?.price ?? 0;
-      return acc + item.qty * price;
-    }, 0);
-
-    return sum + subtotal;
-  }, 0);
-  const todayShishaCount = ordersToday.reduce((sum, order) => {
-    const shishaQty = (order.order_items ?? []).reduce((acc, item) => {
-      if (item.products?.category !== 'shisha') {
-        return acc;
-      }
-      return acc + item.qty;
-    }, 0);
-    return sum + shishaQty;
-  }, 0);
-
-  function getStationBadges(order: (typeof submittedOrders)[number]) {
-    const stationStatus = Array.isArray(order.order_station_status)
-      ? order.order_station_status[0]
-      : order.order_station_status;
-    const hasDrink = (order.order_items ?? []).some((item) => item.products?.category === 'drink');
-    const hasShisha = (order.order_items ?? []).some((item) => item.products?.category === 'shisha');
-    const badges: { label: string; variant: 'success' | 'warning' }[] = [];
-
-    if (hasDrink) {
-      badges.push({
-        label: stationStatus?.bar_status === 'done' ? 'Piće gotovo' : 'Čeka se piće',
-        variant: stationStatus?.bar_status === 'done' ? 'success' : 'warning',
-      });
-    }
-
-    if (hasShisha) {
-      badges.push({
-        label: stationStatus?.shisha_status === 'done' ? 'Shisha gotova' : 'Čeka se shisha',
-        variant: stationStatus?.shisha_status === 'done' ? 'success' : 'warning',
-      });
-    }
-
-    return badges;
-  }
-
-  function getOrderTotal(order: (typeof submittedOrders)[number]) {
-    return (order.order_items ?? []).reduce((sum, item) => {
-      const price = item.products?.price ?? 0;
-      return sum + item.qty * price;
-    }, 0);
-  }
+  const [ordersRaw, productsRaw] = await Promise.all([getAdminOrdersDataset(), getAllProducts()]);
+  const orders = ordersRaw as DashboardOrder[];
+  const products = productsRaw.map((product) => ({
+    id: product.id,
+    name: product.name,
+    category: product.category,
+  }));
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-4 py-6">
@@ -118,109 +49,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
         <LogoutButton />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Link href={`/admin/orders?view=today&status=${status}`} className="rounded border px-3 py-1 text-sm">
-          Danas
-        </Link>
-        <Link href={`/admin/orders?view=week&status=${status}`} className="rounded border px-3 py-1 text-sm">
-          Ova sedmica
-        </Link>
-        {(['all', 'new', 'in_progress', 'completed'] as const).map((s) => (
-          <Link key={s} href={`/admin/orders?view=${view}&status=${s}`} className="rounded border px-3 py-1 text-sm">
-            {statusLabelMap[s]}
-          </Link>
-        ))}
-      </div>
-
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <Card className="bg-white/90">
-          <CardHeader>
-            <CardTitle>Broj narudžbi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{orderCount}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/90">
-          <CardHeader>
-            <CardTitle>Prihod</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/90">
-          <CardHeader>
-            <CardTitle>Broj nargila danas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{todayShishaCount}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mb-6 space-y-3">
-        <h2 className="text-base font-semibold">Pregled trenutnih narudžbi</h2>
-        {submittedOrders.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Još nema poslanih narudžbi danas.</p>
-        ) : (
-          submittedOrders.map((order) => (
-            <Card
-              key={order.id}
-              className={
-                order.status === 'completed' ? 'border-emerald-200 bg-white/90' : 'border-orange-200 bg-white/90'
-              }
-            >
-              <CardContent className="space-y-2 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold">Sto {order.tables?.number ?? '-'}</p>
-                  <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
-                </div>
-                <p className="text-xs font-semibold">Ukupno: {formatCurrency(getOrderTotal(order))}</p>
-                <div className="flex flex-wrap gap-2">
-                  {getStationBadges(order).map((badge) => (
-                    <Badge key={`${order.id}-${badge.label}`} variant={badge.variant}>
-                      {badge.label}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {/* <div className="grid gap-3">
-        {orders.map((order) => {
-          const station = Array.isArray(order.order_station_status)
-            ? order.order_station_status[0]
-            : order.order_station_status;
-
-          return (
-            <Card key={order.id} className="bg-white/90">
-              <CardContent className="space-y-2 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-semibold">Sto {order.tables?.number ?? '-'}</p>
-                  <div className="flex gap-2">
-                    <StatusBadge status={order.status} />
-                    <StatusBadge status={station?.bar_status ?? 'pending'} />
-                    <StatusBadge status={station?.shisha_status ?? 'pending'} />
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
-                <ul className="space-y-1 text-sm">
-                  {(order.order_items ?? []).map((item, idx) => (
-                    <li key={`${order.id}-${idx}`}>
-                      {item.qty}x {item.products?.name ?? 'Nepoznato'} ({item.products?.category ? categoryLabelMap[item.products.category] : '-'})
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div> */}
+      <AdminOrdersDashboard orders={orders} products={products} />
     </main>
   );
 }

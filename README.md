@@ -12,11 +12,16 @@ Next.js 15 + TypeScript + Tailwind + shadcn/ui-style components + Supabase Auth/
 
 ## Environment
 
-Copy `.env.example` to `.env.local` and fill values:
+Copy `.env.example` to `.env.local` and fill values for your development Supabase project:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_DEV_PROJECT_REF`
+
+Notes:
+- In local development, Next.js loads `.env.local` first, so local runs use your dev Supabase project.
+- `SUPABASE_DEV_PROJECT_REF` is a safety check. If `.env.local` points to a different project URL than this ref, the app throws on startup in development.
 
 ## Install + Run
 

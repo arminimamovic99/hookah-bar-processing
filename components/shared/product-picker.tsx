@@ -81,10 +81,21 @@ export function ProductPicker({
         .filter((product): product is Product => Boolean(product)),
     [selectedProductIds, selectableProducts]
   );
-  const selectedShishaProduct = useMemo(
-    () => selectableProducts.find((product) => product.id === selectedShishaProductId),
-    [selectableProducts, selectedShishaProductId]
+  const availableShishaProducts = useMemo(
+    () => selectableProducts.filter((product) => product.category === 'shisha'),
+    [selectableProducts]
   );
+  const defaultShishaProduct = availableShishaProducts[0] ?? null;
+  const selectedShishaProduct = useMemo(
+    () => selectableProducts.find((product) => product.id === selectedShishaProductId) ?? defaultShishaProduct,
+    [defaultShishaProduct, selectableProducts, selectedShishaProductId]
+  );
+
+  useEffect(() => {
+    if (!defaultShishaProduct) return;
+    if (selectedShishaProductId === defaultShishaProduct.id) return;
+    setSelectedShishaProductId(defaultShishaProduct.id);
+  }, [defaultShishaProduct, selectedShishaProductId]);
 
   useEffect(() => {
     function onDocumentMouseDown(event: MouseEvent) {
@@ -127,15 +138,7 @@ export function ProductPicker({
   }
 
   function selectProduct(productId: string) {
-    if (activeCategory === 'drink') {
-      setSelectedProductIds((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
-    } else {
-      setSelectedShishaProductId(productId);
-      setSelectedShishaFlavorIds([]);
-      setShowShishaPickerCard(true);
-      setIsCup(false);
-      setShishaCustomNote('');
-    }
+    setSelectedProductIds((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
     setIsOpen(false);
     setSearch('');
   }
@@ -297,76 +300,66 @@ export function ProductPicker({
         </div>
       ) : null}
 
-      <div className="space-y-1">
-        <Label htmlFor="product-combobox">Odaberi proizvod</Label>
-        <div ref={wrapperRef} className="relative">
-          <Button
-            id="product-combobox"
-            type="button"
-            variant="outline"
-            className="h-11 w-full justify-between px-3"
-            onClick={() => setIsOpen((prev) => !prev)}
-            disabled={isLoading}
-            aria-expanded={isOpen}
-            aria-haspopup="listbox"
-          >
-            <span className="truncate text-left">
-              {activeCategory === 'drink'
-                ? selectedProducts.length > 0
-                  ? 'Dodaj još pića...'
-                  : 'Pretraži i odaberi piće...'
-                : selectedShishaProduct
-                  ? 'Promijeni nargilu...'
-                  : 'Pretraži i odaberi nargilu...'}
-            </span>
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronsUpDown className="h-4 w-4 opacity-50" />}
-          </Button>
-          {isOpen ? (
-            <div className="absolute z-30 mt-2 w-full rounded-md border bg-white p-2 shadow-md">
-              <Input
-                placeholder="Upiši naziv proizvoda..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="mb-2"
-                autoFocus
-              />
-              <div className="max-h-60 overflow-y-auto" role="listbox" aria-label="Proizvodi">
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Učitavanje proizvoda...
-                  </div>
-                ) : visibleProducts.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">No products found</p>
-                ) : (
-                  visibleProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      className="flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm hover:bg-orange-50"
-                      onClick={() => selectProduct(product.id)}
-                    >
-                      <span className="truncate">{product.name}</span>
-                      <Check
-                        className={cn(
-                          'h-4 w-4',
-                          activeCategory === 'drink'
-                            ? selectedProductIds.includes(product.id)
-                              ? 'opacity-100'
-                              : 'opacity-0'
-                            : product.id === selectedShishaProductId
-                              ? 'opacity-100'
-                              : 'opacity-0'
-                        )}
-                      />
-                    </button>
-                  ))
-                )}
+      {activeCategory === 'drink' ? (
+        <div className="space-y-1">
+          <Label htmlFor="product-combobox">Odaberi proizvod</Label>
+          <div ref={wrapperRef} className="relative">
+            <Button
+              id="product-combobox"
+              type="button"
+              variant="outline"
+              className="h-11 w-full justify-between px-3"
+              onClick={() => setIsOpen((prev) => !prev)}
+              disabled={isLoading}
+              aria-expanded={isOpen}
+              aria-haspopup="listbox"
+            >
+              <span className="truncate text-left">
+                {selectedProducts.length > 0 ? 'Dodaj još pića...' : 'Pretraži i odaberi piće...'}
+              </span>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronsUpDown className="h-4 w-4 opacity-50" />}
+            </Button>
+            {isOpen ? (
+              <div className="absolute z-30 mt-2 w-full rounded-md border bg-white p-2 shadow-md">
+                <Input
+                  placeholder="Upiši naziv proizvoda..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="mb-2"
+                  autoFocus
+                />
+                <div className="max-h-60 overflow-y-auto" role="listbox" aria-label="Proizvodi">
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Učitavanje proizvoda...
+                    </div>
+                  ) : visibleProducts.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-muted-foreground">No products found</p>
+                  ) : (
+                    visibleProducts.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm hover:bg-orange-50"
+                        onClick={() => selectProduct(product.id)}
+                      >
+                        <span className="truncate">{product.name}</span>
+                        <Check
+                          className={cn(
+                            'h-4 w-4',
+                            selectedProductIds.includes(product.id) ? 'opacity-100' : 'opacity-0'
+                          )}
+                        />
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {isLoading ? (
         <Card className="border-orange-200/60 bg-white/80">
@@ -563,7 +556,7 @@ export function ProductPicker({
       ) : null}
 
       {!isLoading && activeCategory === 'shisha' && !selectedShishaProduct ? (
-        <p className="text-sm text-muted-foreground">Odaberi nargilu iz pretrage.</p>
+        <p className="text-sm text-muted-foreground">Nargila proizvod nije pronađen.</p>
       ) : null}
     </div>
   );

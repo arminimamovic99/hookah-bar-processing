@@ -2,18 +2,16 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { Database } from '@/lib/types/database';
-
-function getSupabaseAnonKey() {
-  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-}
+import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
 
 export async function createServerComponentClient(): Promise<any> {
   const cookieStore = await cookies();
   const anonKey = getSupabaseAnonKey();
+  const url = getSupabaseUrl();
 
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    anonKey!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
@@ -36,10 +34,11 @@ export async function createServerComponentClient(): Promise<any> {
 export async function createServerActionClient(): Promise<any> {
   const cookieStore = await cookies();
   const anonKey = getSupabaseAnonKey();
+  const url = getSupabaseUrl();
 
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    anonKey!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {

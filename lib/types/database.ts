@@ -3,7 +3,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type AppRole = 'waiter' | 'bar' | 'shisha' | 'admin';
 export type ProductCategory = 'drink' | 'shisha';
 export type DrinkSubcategory = 'cold' | 'warm';
-export type OrderStatus = 'new' | 'in_progress' | 'completed';
+export type OrderStatus = 'new' | 'in_progress' | 'completed' | 'archived';
 export type StationStatus = 'pending' | 'done';
 
 export type Database = {

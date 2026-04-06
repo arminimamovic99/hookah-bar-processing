@@ -73,7 +73,7 @@ export async function createOrderAction(input: unknown) {
     .select('id')
     .eq('table_id', parsed.data.tableId)
     .is('closed_at', null)
-    .in('status', ['new', 'in_progress', 'completed'])
+    .in('status', ['new', 'in_progress'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()) as {
@@ -178,6 +178,10 @@ const closeTableSchema = z.object({
   tableId: z.string().uuid(),
 });
 
+const archiveOrderSchema = z.object({
+  orderId: z.string().uuid(),
+});
+
 export async function closeTableOrdersAction(input: unknown) {
   await requireRoles(['waiter', 'admin']);
   const parsed = closeTableSchema.safeParse(input);
@@ -221,20 +225,62 @@ export async function closeTableOrdersAction(input: unknown) {
     return { error: stationUpdateError.message };
   }
 
-  const { error: closeOrdersError } = await supabase
+  const { error: closeOrdersError } = await admin
     .from('orders')
     .update({ closed_at: new Date().toISOString() })
     .in('id', orderIds);
 
   if (closeOrdersError) {
-    const adminSupabase = createAdminClient();
-    const { error: adminCloseOrdersError } = await adminSupabase
-      .from('orders')
-      .update({ closed_at: new Date().toISOString() })
-      .in('id', orderIds);
-    if (adminCloseOrdersError) {
-      return { error: adminCloseOrdersError.message };
-    }
+    return { error: closeOrdersError.message };
+  }
+
+  revalidatePath('/waiter');
+  revalidatePath('/station/bar');
+  revalidatePath('/station/shisha');
+  revalidatePath('/admin/orders');
+  return { success: true };
+}
+
+export async function archiveOrderAction(input: unknown) {
+  await requireRoles(['waiter', 'admin']);
+  const parsed = archiveOrderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Neispravan ID narudžbe.' };
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.' };
+  }
+
+  const admin = createAdminClient();
+  const { data: order, error: fetchError } = (await admin
+    .from('orders')
+    .select('id, status, closed_at')
+    .eq('id', parsed.data.orderId)
+    .maybeSingle()) as {
+    data: { id: string; status: 'new' | 'in_progress' | 'completed' | 'archived'; closed_at: string | null } | null;
+    error: { message: string } | null;
+  };
+
+  if (fetchError) {
+    return { error: fetchError.message };
+  }
+
+  if (!order) {
+    return { error: 'Narudžba nije pronađena.' };
+  }
+
+  if (order.status !== 'completed') {
+    return { error: 'Samo završene narudžbe mogu u arhivu.' };
+  }
+
+  const { error: updateError } = await admin
+    .from('orders')
+    .update({ status: 'archived', closed_at: new Date().toISOString() })
+    .eq('id', parsed.data.orderId);
+
+  if (updateError) {
+    return { error: updateError.message };
   }
 
   revalidatePath('/waiter');

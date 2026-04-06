@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { closeTableOrdersAction, createOrderAction } from '@/app/actions/order-actions';
+import { archiveOrderAction, createOrderAction } from '@/app/actions/order-actions';
 import { OrderCard, StationOrder } from '@/components/shared/order-card';
 import { ProductPicker, Product, DraftItem, ShishaFlavor } from '@/components/shared/product-picker';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
-import { CircleX } from 'lucide-react';
+import { CircleX, Loader2 } from 'lucide-react';
 
 interface WaiterOrderingClientProps {
   tables: TableOption[];
@@ -23,15 +23,15 @@ interface WaiterOrderingClientProps {
 
 export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOrders }: WaiterOrderingClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'new' | 'active'>('new');
+  const [activeTab, setActiveTab] = useState<'new' | 'active' | 'payment'>('new');
   const [tableId, setTableId] = useState(tables[0]?.id ?? '');
   const [orders, setOrders] = useState<StationOrder[]>(activeOrders);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const [isClosingTable, startCloseTransition] = useTransition();
-  const [closingTableId, setClosingTableId] = useState<string | null>(null);
+  const [isArchivingOrder, startArchiveTransition] = useTransition();
+  const [archivingOrderId, setArchivingOrderId] = useState<string | null>(null);
 
   const visibleOrders = useMemo(() => {
     const from = new Date();
@@ -40,7 +40,23 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
       .filter((order) => new Date(order.created_at) >= from)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [orders]);
-  const pendingOrders = useMemo(() => visibleOrders, [visibleOrders]);
+  const activeOrdersList = useMemo(
+    () => visibleOrders.filter((order) => order.status === 'new' || order.status === 'in_progress'),
+    [visibleOrders]
+  );
+  const paymentOrders = useMemo(() => {
+    return visibleOrders.filter((order) => {
+      if (order.status !== 'completed') return false;
+      const stationStatus = Array.isArray(order.order_station_status)
+        ? order.order_station_status[0]
+        : order.order_station_status;
+      const hasDrink = (order.order_items ?? []).some((item) => item.products?.category === 'drink');
+      const hasShisha = (order.order_items ?? []).some((item) => item.products?.category === 'shisha');
+      const barDone = !hasDrink || stationStatus?.bar_status === 'done';
+      const shishaDone = !hasShisha || stationStatus?.shisha_status === 'done';
+      return barDone && shishaDone;
+    });
+  }, [visibleOrders]);
   const tableOrders = useMemo(
     () => visibleOrders.filter((order) => order.table_id === tableId),
     [visibleOrders, tableId]
@@ -221,19 +237,18 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     });
   }
 
-  function closeTableOrders(targetTableId = tableId) {
+  function archiveOrder(orderId: string) {
     setFeedback(null);
-    startCloseTransition(async () => {
-      setClosingTableId(targetTableId);
-      const result = await closeTableOrdersAction({ tableId: targetTableId });
+    startArchiveTransition(async () => {
+      setArchivingOrderId(orderId);
+      const result = await archiveOrderAction({ orderId });
       if ('error' in result) {
         setFeedback(result.error ?? 'Došlo je do greške.');
-        setClosingTableId(null);
+        setArchivingOrderId(null);
         return;
       }
-      setFeedback('Sto je zatvoren.');
-      setItems([]);
-      setClosingTableId(null);
+      setFeedback('Narudžba je zatvorena.');
+      setArchivingOrderId(null);
       router.refresh();
     });
   }
@@ -270,9 +285,13 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     }, 0);
   }
 
+  function getOrderProductCount(order: StationOrder) {
+    return (order.order_items ?? []).reduce((sum, item) => sum + item.qty, 0);
+  }
+
   return (
     <div className="space-y-4 pb-56 md:pb-0">
-      <div className="grid grid-cols-2 gap-2 rounded-md border bg-white/70 p-1">
+      <div className="grid grid-cols-3 gap-2 rounded-md border bg-white/70 p-1">
         <Button
           type="button"
           variant={activeTab === 'new' ? 'default' : 'ghost'}
@@ -287,9 +306,22 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
           className="relative"
         >
           Aktivne narudžbe
-          {pendingOrders.length > 0 ? (
+          {activeOrdersList.length > 0 ? (
             <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-xs text-white">
-              {pendingOrders.length}
+              {activeOrdersList.length}
+            </span>
+          ) : null}
+        </Button>
+        <Button
+          type="button"
+          variant={activeTab === 'payment' ? 'default' : 'ghost'}
+          onClick={() => setActiveTab('payment')}
+          className="relative"
+        >
+          Za naplatu
+          {paymentOrders.length > 0 ? (
+            <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-500 px-1 text-xs text-white">
+              {paymentOrders.length}
             </span>
           ) : null}
         </Button>
@@ -303,15 +335,6 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
             </CardHeader>
             <CardContent className="space-y-5 p-5">
               <TableSelector tables={tables} value={tableId} onChange={setTableId} />
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                disabled={isClosingTable || !tableId || tableOrders.length === 0}
-                onClick={() => closeTableOrders()}
-              >
-                {isClosingTable ? 'Zatvaranje...' : 'Zatvori sto'}
-              </Button>
               <ProductPicker
                 products={products}
                 shishaFlavors={shishaFlavors}
@@ -328,7 +351,14 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                 }
                 className="hidden w-full md:inline-flex"
               >
-                {isPending ? 'Slanje...' : 'Pošalji narudžbu'}
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Slanje...
+                  </>
+                ) : (
+                  'Pošalji narudžbu'
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -351,17 +381,24 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
               }
               className="h-11 w-full"
             >
-              {isPending ? 'Slanje...' : 'Pošalji narudžbu'}
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Slanje...
+                </>
+              ) : (
+                'Pošalji narudžbu'
+              )}
             </Button>
           </div>
         </>
-      ) : (
+      ) : activeTab === 'active' ? (
         <div className="space-y-3">
           <h2 className="text-base font-semibold">Aktivne narudžbe</h2>
-          {pendingOrders.length === 0 ? (
+          {activeOrdersList.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nema aktivnih narudžbi.</p>
           ) : (
-            pendingOrders.map((order) => (
+            activeOrdersList.map((order) => (
               <Card
                 key={order.id}
                 className="border-orange-200 bg-white/90"
@@ -371,15 +408,6 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                     <p className="text-sm font-semibold">Idi na sto {order.tables?.number ?? '-'}</p>
                     <StatusBadge status={order.status === 'new' ? 'pending' : order.status} />
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={isClosingTable}
-                    onClick={() => closeTableOrders(order.table_id)}
-                  >
-                    {isClosingTable && closingTableId === order.table_id ? 'Zatvaranje...' : 'Zatvori sto'}
-                  </Button>
                   <p className="text-xs font-semibold">Ukupno: {formatCurrency(getOrderTotal(order))}</p>
                   {/* <PrintOrderButton
                     tableNumber={order.tables?.number ?? '-'}
@@ -397,6 +425,54 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold">Za naplatu</h2>
+          {paymentOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nema narudžbi spremnih za naplatu.</p>
+          ) : (
+            paymentOrders.map((order) => (
+              <Card key={order.id} className="border-orange-200 bg-white/90">
+                <CardHeader>
+                  <CardTitle className="text-base">Sto {order.tables?.number ?? '-'}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(order.created_at)}</p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <ul className="space-y-1 text-sm">
+                    {(order.order_items ?? []).map((item) => (
+                      <li key={item.id}>
+                        {item.qty}x {item.products?.name ?? 'Nepoznata stavka'}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="rounded-md border border-orange-100 bg-orange-50/40 p-2 text-sm">
+                    <p>
+                      Proizvoda: <strong>{getOrderProductCount(order)}</strong>
+                    </p>
+                    <p>
+                      Iznos: <strong>{formatCurrency(getOrderTotal(order))}</strong>
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={isArchivingOrder}
+                    onClick={() => archiveOrder(order.id)}
+                  >
+                    {isArchivingOrder && archivingOrderId === order.id ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Zatvaranje...
+                      </>
+                    ) : (
+                      'Zatvori narudžbu'
+                    )}
+                  </Button>
                 </CardContent>
               </Card>
             ))

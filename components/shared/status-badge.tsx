@@ -5,6 +5,7 @@ function labelForStatus(status: OrderStatus | StationStatus) {
   if (status === 'new') return 'Novo';
   if (status === 'in_progress') return 'U toku';
   if (status === 'completed') return 'Završeno';
+  if (status === 'archived') return 'Arhivirano';
   if (status === 'pending') return 'Čeka';
   if (status === 'done') return 'Gotovo';
   return status;

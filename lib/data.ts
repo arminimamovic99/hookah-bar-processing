@@ -88,6 +88,7 @@ export async function getStationOrders(station: ProductCategory) {
     .select(
       'id, status, table_id, created_at, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, is_new, note, products(name, category, price))'
     )
+    .is('closed_at', null)
     .in('status', ['new', 'in_progress'])
     .order('created_at', { ascending: false });
 
@@ -117,5 +118,18 @@ export async function getAdminOrders(view: 'today' | 'week', status: 'all' | 'ne
   const { data, error } = await query;
   if (error) throw error;
 
+  return data ?? [];
+}
+
+export async function getAdminOrdersDataset() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('orders')
+    .select(
+      'id, status, created_at, closed_at, table_id, tables(number), order_station_status(bar_status, shisha_status), order_items(id, qty, note, products(id, name, category, price))'
+    )
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
   return data ?? [];
 }
