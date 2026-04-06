@@ -27,7 +27,7 @@ export async function createOrderAction(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? 'Neispravan format narudžbe.' };
   }
 
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.' };
   }
 
@@ -189,7 +189,7 @@ export async function closeTableOrdersAction(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? 'Neispravan sto.' };
   }
 
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.' };
   }
 

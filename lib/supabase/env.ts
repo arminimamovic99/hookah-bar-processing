@@ -18,22 +18,24 @@ function assertExpectedDevProjectRef(url: string) {
 }
 
 export function getSupabaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? process.env.SUPABASE_URL?.trim();
   if (!url) {
-    throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL');
+    throw new Error('Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_URL');
   }
   assertExpectedDevProjectRef(url);
   return url;
 }
 
 export function getSupabaseAnonKey(): string {
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? process.env.SUPABASE_ANON_KEY?.trim();
   if (anonKey) return anonKey;
 
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY?.trim();
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY?.trim() ??
+    process.env.SUPABASE_PUBLISHABLE_DEFAULT_KEY?.trim();
   if (!publishableKey) {
     throw new Error(
-      'Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY'
+      'Missing required env var: NEXT_PUBLIC_SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY / SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_DEFAULT_KEY'
     );
   }
   return publishableKey;
