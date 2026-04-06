@@ -243,7 +243,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
       setArchivingOrderId(orderId);
       const result = await archiveOrderAction({ orderId });
       if ('error' in result) {
-        setFeedback(result.error ?? 'Došlo je do greške.');
+        setFeedback(`Greška: ${result.error ?? 'Došlo je do greške.'}`);
         setArchivingOrderId(null);
         return;
       }
@@ -326,6 +326,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
           ) : null}
         </Button>
       </div>
+      {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
 
       {activeTab === 'new' ? (
         <>
@@ -342,7 +343,6 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
                 onChange={setItems}
                 isLoading={isProductsLoading}
               />
-              {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
               <div className="hidden space-y-2 md:block">{orderSummaryBlock}</div>
               <Button
                 onClick={submitOrder}

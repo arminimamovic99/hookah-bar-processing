@@ -248,39 +248,44 @@ export async function archiveOrderAction(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? 'Neispravan ID narudžbe.' };
   }
 
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.' };
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    return { error: 'Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru (production env).' };
   }
 
-  const admin = createAdminClient();
-  const { data: order, error: fetchError } = (await admin
-    .from('orders')
-    .select('id, status, closed_at')
-    .eq('id', parsed.data.orderId)
-    .maybeSingle()) as {
-    data: { id: string; status: 'new' | 'in_progress' | 'completed' | 'archived'; closed_at: string | null } | null;
-    error: { message: string } | null;
-  };
+  try {
+    const admin = createAdminClient();
+    const { data: order, error: fetchError } = (await admin
+      .from('orders')
+      .select('id, status, closed_at')
+      .eq('id', parsed.data.orderId)
+      .maybeSingle()) as {
+      data: { id: string; status: 'new' | 'in_progress' | 'completed' | 'archived'; closed_at: string | null } | null;
+      error: { message: string } | null;
+    };
 
-  if (fetchError) {
-    return { error: fetchError.message };
-  }
+    if (fetchError) {
+      return { error: fetchError.message };
+    }
 
-  if (!order) {
-    return { error: 'Narudžba nije pronađena.' };
-  }
+    if (!order) {
+      return { error: 'Narudžba nije pronađena.' };
+    }
 
-  if (order.status !== 'completed') {
-    return { error: 'Samo završene narudžbe mogu u arhivu.' };
-  }
+    if (order.status !== 'completed') {
+      return { error: 'Samo završene narudžbe mogu u arhivu.' };
+    }
 
-  const { error: updateError } = await admin
-    .from('orders')
-    .update({ status: 'archived', closed_at: new Date().toISOString() })
-    .eq('id', parsed.data.orderId);
+    const { error: updateError } = await admin
+      .from('orders')
+      .update({ status: 'archived', closed_at: new Date().toISOString() })
+      .eq('id', parsed.data.orderId);
 
-  if (updateError) {
-    return { error: updateError.message };
+    if (updateError) {
+      return { error: updateError.message };
+    }
+  } catch (error) {
+    console.error('archiveOrderAction failed', error);
+    return { error: 'Server error while archiving order. Check server logs.' };
   }
 
   revalidatePath('/waiter');
