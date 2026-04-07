@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireRoles } from '@/lib/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createServerActionClient } from '@/lib/supabase/server';
 
 const updateStationSchema = z.object({
@@ -25,6 +26,7 @@ export async function markStationDoneAction(input: unknown) {
   }
 
   const supabase = await createServerActionClient();
+  const admin = createAdminClient();
 
   const { data: existingRow, error: existingRowError } = await supabase
     .from('order_station_status')
@@ -77,7 +79,7 @@ export async function markStationDoneAction(input: unknown) {
     .map((item) => item.id);
 
   if (newItemIds.length > 0) {
-    const { error: clearNewError } = await supabase
+    const { error: clearNewError } = await admin
       .from('order_items')
       .update({ is_new: false })
       .in('id', newItemIds);

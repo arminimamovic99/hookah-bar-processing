@@ -198,6 +198,26 @@ export type Database = {
         };
         Relationships: [];
       };
+      order_submit_requests: {
+        Row: {
+          request_id: string;
+          created_by_user: string;
+          table_id: string;
+          order_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          request_id: string;
+          created_by_user: string;
+          table_id: string;
+          order_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          order_id?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

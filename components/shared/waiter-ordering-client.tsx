@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { archiveOrderAction, createOrderAction } from '@/app/actions/order-actions';
 import { OrderCard, StationOrder } from '@/components/shared/order-card';
@@ -23,10 +23,13 @@ interface WaiterOrderingClientProps {
 
 export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOrders }: WaiterOrderingClientProps) {
   const router = useRouter();
+  const submitLockRef = useRef(false);
+  const submitRequestIdRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<'new' | 'active' | 'payment'>('new');
   const [tableId, setTableId] = useState(tables[0]?.id ?? '');
   const [orders, setOrders] = useState<StationOrder[]>(activeOrders);
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [pickerResetNonce, setPickerResetNonce] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -176,6 +179,10 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
   }, []);
 
   useEffect(() => {
+    submitRequestIdRef.current = null;
+  }, [tableId, items]);
+
+  useEffect(() => {
     const supabase = createClient();
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let isUnmounted = false;
@@ -230,24 +237,36 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
   }, [router]);
 
   function submitOrder() {
+    if (submitLockRef.current) return;
     setFeedback(null);
+    submitLockRef.current = true;
     startTransition(async () => {
-      const payload = {
-        tableId,
-        items: items
-          .filter((item) => item.qty > 0)
-          .map((item) => ({ productId: item.productId, qty: item.qty, note: item.note })),
-      };
+      try {
+        const requestId = submitRequestIdRef.current ?? crypto.randomUUID();
+        submitRequestIdRef.current = requestId;
+        const payload = {
+          tableId,
+          requestId,
+          items: items
+            .filter((item) => item.qty > 0)
+            .map((item) => ({ productId: item.productId, qty: item.qty, note: item.note })),
+        };
 
-      const result = await createOrderAction(payload);
-      if ('error' in result) {
-        setFeedback(result.error ?? 'Došlo je do greške.');
-        return;
+        const result = await createOrderAction(payload);
+        if ('error' in result) {
+          setFeedback(result.error ?? 'Došlo je do greške.');
+          return;
+        }
+
+        setFeedback('Narudžba je poslana.');
+        setItems([]);
+        setTableId('');
+        setPickerResetNonce((prev) => prev + 1);
+        submitRequestIdRef.current = null;
+        router.refresh();
+      } finally {
+        submitLockRef.current = false;
       }
-
-      setFeedback('Narudžba je poslana.');
-      setItems([]);
-      router.refresh();
     });
   }
 
@@ -351,6 +370,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
             <CardContent className="space-y-5 p-5">
               <TableSelector tables={tables} value={tableId} onChange={setTableId} />
               <ProductPicker
+                key={pickerResetNonce}
                 products={products}
                 shishaFlavors={shishaFlavors}
                 items={items}

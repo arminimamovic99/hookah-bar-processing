@@ -8,6 +8,7 @@ import { createServerActionClient } from '@/lib/supabase/server';
 
 const createOrderSchema = z.object({
   tableId: z.string().uuid(),
+  requestId: z.string().uuid(),
   items: z
     .array(
       z.object({
@@ -33,6 +34,42 @@ export async function createOrderAction(input: unknown) {
 
   const supabase = await createServerActionClient();
   const admin = createAdminClient();
+
+  const { data: existingRequestRow, error: existingRequestError } = (await admin
+    .from('order_submit_requests')
+    .select('request_id, created_by_user, table_id, order_id')
+    .eq('request_id', parsed.data.requestId)
+    .maybeSingle()) as {
+    data: { request_id: string; created_by_user: string; table_id: string; order_id: string | null } | null;
+    error: { message: string } | null;
+  };
+
+  if (existingRequestError) {
+    return { error: existingRequestError.message };
+  }
+
+  if (existingRequestRow?.order_id) {
+    return { success: true, orderId: existingRequestRow.order_id };
+  }
+
+  if (existingRequestRow) {
+    if (
+      existingRequestRow.created_by_user !== profile.id ||
+      existingRequestRow.table_id !== parsed.data.tableId
+    ) {
+      return { error: 'Request ID je već iskorišten za drugi zahtjev.' };
+    }
+  } else {
+    const { error: insertRequestError } = await admin.from('order_submit_requests').insert({
+      request_id: parsed.data.requestId,
+      created_by_user: profile.id,
+      table_id: parsed.data.tableId,
+      order_id: null,
+    });
+    if (insertRequestError) {
+      return { error: insertRequestError.message };
+    }
+  }
 
   const productIds = parsed.data.items.map((i) => i.productId);
   const { data: products, error: productError } = (await supabase
@@ -68,24 +105,33 @@ export async function createOrderAction(input: unknown) {
   const hasDrink = parsed.data.items.some((item) => productMap.get(item.productId)?.category === 'drink');
   const hasShisha = parsed.data.items.some((item) => productMap.get(item.productId)?.category === 'shisha');
 
-  const { data: activeOrder } = (await supabase
+  const { data: activeOrder } = (await admin
     .from('orders')
-    .select('id')
+    .select('id, status, created_at')
     .eq('table_id', parsed.data.tableId)
     .is('closed_at', null)
     .in('status', ['new', 'in_progress', 'completed'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()) as {
-    data: { id: string } | null;
+    data: { id: string; status: 'new' | 'in_progress' | 'completed'; created_at: string } | null;
     error: { message: string } | null;
   };
 
   let orderId = activeOrder?.id ?? null;
+  // Keep same-day merge behavior, but avoid reusing stale completed orders from previous days.
+  if (activeOrder?.status === 'completed') {
+    const orderCreatedAt = new Date(activeOrder.created_at);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    if (orderCreatedAt < startOfToday) {
+      orderId = null;
+    }
+  }
   let createdNewOrder = false;
 
   if (!orderId) {
-    const { data: order, error: orderError } = (await supabase
+    const { data: order, error: orderError } = (await admin
       .from('orders')
       .insert({
         table_id: parsed.data.tableId,
@@ -112,7 +158,7 @@ export async function createOrderAction(input: unknown) {
     });
 
     if (stationError) {
-      await supabase.from('orders').delete().eq('id', orderId);
+      await admin.from('orders').delete().eq('id', orderId);
       return { error: stationError.message };
     }
   } else {
@@ -153,6 +199,22 @@ export async function createOrderAction(input: unknown) {
     return { error: 'Kreiranje narudžbe nije uspjelo.' };
   }
 
+  const { data: existingOrderRow, error: existingOrderError } = (await admin
+    .from('orders')
+    .select('id')
+    .eq('id', orderId)
+    .maybeSingle()) as {
+    data: { id: string } | null;
+    error: { message: string } | null;
+  };
+
+  if (existingOrderError) {
+    return { error: existingOrderError.message };
+  }
+  if (!existingOrderRow) {
+    return { error: 'Narudžba nije pronađena prije upisa stavki.' };
+  }
+
   const { error: itemsError } = await admin.from('order_items').insert(
     parsed.data.items.map((item) => ({
       order_id: orderId!,
@@ -165,9 +227,17 @@ export async function createOrderAction(input: unknown) {
 
   if (itemsError) {
     if (createdNewOrder) {
-      await supabase.from('orders').delete().eq('id', orderId);
+      await admin.from('orders').delete().eq('id', orderId);
     }
     return { error: itemsError.message };
+  }
+
+  const { error: requestUpdateError } = await admin
+    .from('order_submit_requests')
+    .update({ order_id: orderId })
+    .eq('request_id', parsed.data.requestId);
+  if (requestUpdateError) {
+    return { error: requestUpdateError.message };
   }
 
   revalidatePath('/waiter');
