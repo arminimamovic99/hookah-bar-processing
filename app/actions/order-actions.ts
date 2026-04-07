@@ -73,7 +73,7 @@ export async function createOrderAction(input: unknown) {
     .select('id')
     .eq('table_id', parsed.data.tableId)
     .is('closed_at', null)
-    .in('status', ['new', 'in_progress'])
+    .in('status', ['new', 'in_progress', 'completed'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()) as {

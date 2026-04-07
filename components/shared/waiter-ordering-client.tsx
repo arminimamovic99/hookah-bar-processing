@@ -45,7 +45,7 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
     [visibleOrders]
   );
   const paymentOrders = useMemo(() => {
-    return visibleOrders.filter((order) => {
+    const filtered = visibleOrders.filter((order) => {
       if (order.status !== 'completed') return false;
       const stationStatus = Array.isArray(order.order_station_status)
         ? order.order_station_status[0]
@@ -55,6 +55,20 @@ export function WaiterOrderingClient({ tables, products, shishaFlavors, activeOr
       const barDone = !hasDrink || stationStatus?.bar_status === 'done';
       const shishaDone = !hasShisha || stationStatus?.shisha_status === 'done';
       return barDone && shishaDone;
+    });
+
+    return filtered.sort((a, b) => {
+      const aNumber = a.tables?.number ?? '';
+      const bNumber = b.tables?.number ?? '';
+      const aNum = Number(aNumber);
+      const bNum = Number(bNumber);
+      const aIsNumeric = Number.isFinite(aNum);
+      const bIsNumeric = Number.isFinite(bNum);
+
+      if (aIsNumeric && bIsNumeric) return aNum - bNum;
+      if (aIsNumeric) return -1;
+      if (bIsNumeric) return 1;
+      return aNumber.localeCompare(bNumber, 'bs');
     });
   }, [visibleOrders]);
   const tableOrders = useMemo(
