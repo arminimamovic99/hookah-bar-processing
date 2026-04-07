@@ -149,9 +149,13 @@ export async function createOrderAction(input: unknown) {
     }
   }
 
-  const { error: itemsError } = await supabase.from('order_items').insert(
+  if (!orderId) {
+    return { error: 'Kreiranje narudžbe nije uspjelo.' };
+  }
+
+  const { error: itemsError } = await admin.from('order_items').insert(
     parsed.data.items.map((item) => ({
-      order_id: orderId,
+      order_id: orderId!,
       product_id: item.productId,
       qty: item.qty,
       is_new: !createdNewOrder,
